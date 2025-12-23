@@ -1,0 +1,13 @@
+ALTER TABLE task_schedules
+  ADD COLUMN IF NOT EXISTS type       VARCHAR(10),
+  ADD COLUMN IF NOT EXISTS date       DATE,
+  ADD COLUMN IF NOT EXISTS start_date DATE,
+  ADD COLUMN IF NOT EXISTS end_date   DATE,
+  ADD COLUMN IF NOT EXISTS dow_mask   INTEGER;
+
+UPDATE task_schedules
+SET type = 'DATE'
+WHERE type IS NULL;
+
+ALTER TABLE task_schedules
+ALTER COLUMN type SET NOT NULL;
