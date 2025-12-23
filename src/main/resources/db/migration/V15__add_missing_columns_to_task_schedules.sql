@@ -1,0 +1,5 @@
+ALTER TABLE task_schedules
+  ADD COLUMN IF NOT EXISTS start_date DATE,
+  ADD COLUMN IF NOT EXISTS end_date   DATE,
+  ADD COLUMN IF NOT EXISTS date       DATE,
+  ADD COLUMN IF NOT EXISTS dow_mask   INTEGER;
