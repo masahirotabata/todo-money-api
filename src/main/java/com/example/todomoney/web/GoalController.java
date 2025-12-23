@@ -58,21 +58,29 @@ public class GoalController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "goal not found"));
 
     return taskRepo.findByGoalOrderByIdDesc(g).stream()
-    	    .map(t -> new TaskItem(t.getId(), g.getId(), t.getTitle(), t.isCompleted()))
-    	    .toList();
+        .map(t -> new TaskItem(t.getId(), g.getId(), t.getTitle(), t.isCompleted()))
+        .toList();
   }
-
 
   // POST /api/goals/{id}/tasks
   @PostMapping("/{id}/tasks")
-  public TaskItem addTask(@AuthenticationPrincipal AppPrincipal p, @PathVariable long id, @Valid @RequestBody AddTaskRequest req) {
+  public TaskItem addTask(
+      @AuthenticationPrincipal AppPrincipal p,
+      @PathVariable long id,
+      @Valid @RequestBody AddTaskRequest req
+  ) {
     User user = userRepo.findById(p.userId()).orElseThrow();
+
     Goal g = goalRepo.findByIdAndUser(id, user)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "goal not found"));
 
     Task t = new Task();
     t.setGoal(g);
     t.setTitle(req.title());
+
+    // ★ ここが今回の修正：tasks.user_id が NOT NULL なので必ずセットする
+    t.setUser(user);
+
     t = taskRepo.save(t);
 
     return new TaskItem(t.getId(), g.getId(), t.getTitle(), t.isCompleted());
