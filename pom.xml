@@ -9,7 +9,6 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <!-- ※3.xならOK。手元で動かなければ 3.2.x / 3.3.x に合わせてください -->
     <version>3.2.6</version>
     <relativePath/>
   </parent>
@@ -91,6 +90,10 @@
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+        <configuration>
+          <!-- ★ ここが追加: mainクラスを明示して repackage の候補衝突を解消 -->
+          <mainClass>com.example.todomoney.TodoMoneyApplication</mainClass>
+        </configuration>
       </plugin>
     </plugins>
   </build>
