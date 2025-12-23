@@ -54,9 +54,11 @@ public class GoalController {
   @GetMapping("/{id}/tasks")
   public List<TaskItem> tasks(@AuthenticationPrincipal AppPrincipal p, @PathVariable long id) {
     User user = userRepo.findById(p.userId()).orElseThrow();
+
     Goal g = goalRepo.findByIdAndUser(id, user)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "goal not found"));
 
+    // ※ このメソッドは「goal に紐付く tasks」を返す想定
     return taskRepo.findByGoalOrderByIdDesc(g).stream()
         .map(t -> new TaskItem(t.getId(), g.getId(), t.getTitle(), t.isCompleted()))
         .toList();
@@ -75,12 +77,9 @@ public class GoalController {
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "goal not found"));
 
     Task t = new Task();
+    t.setUserId(user.getId());   // ★ここが重要（tasks.user_id NOT NULL 対策）
     t.setGoal(g);
     t.setTitle(req.title());
-
-    // ★ ここが今回の修正：tasks.user_id が NOT NULL なので必ずセットする
-    t.setUser(user);
-
     t = taskRepo.save(t);
 
     return new TaskItem(t.getId(), g.getId(), t.getTitle(), t.isCompleted());
@@ -89,11 +88,13 @@ public class GoalController {
   @PostMapping
   public GoalListItem create(@AuthenticationPrincipal AppPrincipal p, @Valid @RequestBody CreateGoalRequest req) {
     User user = userRepo.findById(p.userId()).orElseThrow();
+
     Goal g = new Goal();
     g.setUser(user);
     g.setTitle(req.title());
     g.setAnnualIncome(req.annualIncome());
     g.setDaysPerYear(365);
+
     g = goalRepo.save(g);
     return toItem(g);
   }
