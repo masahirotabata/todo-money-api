@@ -1,0 +1,2 @@
+ALTER TABLE tasks
+  ALTER COLUMN user_id SET NOT NULL;
