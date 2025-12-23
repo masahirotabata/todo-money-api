@@ -1,0 +1,2 @@
+ALTER TABLE task_schedules
+ADD COLUMN IF NOT EXISTS end_date DATE;
