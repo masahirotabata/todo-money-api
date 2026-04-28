@@ -30,8 +30,12 @@ public class HistoryController {
             HttpServletRequest req
     ) {
         Long userId = AuthUtil.requireUserId(req);
+
         return logs.findByUserIdAndOccurrenceDateBetweenOrderByCompletedAtDesc(
                 userId, LocalDate.parse(from), LocalDate.parse(to)
-        );
+        ).stream()
+         .filter(log -> log.getTask() != null)
+         .filter(log -> !log.getTask().isArchived())
+         .toList();
     }
 }
