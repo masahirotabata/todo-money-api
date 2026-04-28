@@ -12,4 +12,5 @@ public interface TaskScheduleRepository extends JpaRepository<TaskSchedule, Long
     List<TaskSchedule> findByTask_UserId(Long userId);
     List<TaskSchedule> findByUserId(Long userId);
     List<TaskSchedule> findByTask_UserIdAndTask_Id(Long userId, Long taskId);
+    List<TaskSchedule> findByTask_UserIdAndTask_ArchivedFalse(Long userId);
 }
