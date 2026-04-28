@@ -75,7 +75,7 @@ public class CalendarController {
         LocalDate t = LocalDate.parse(to);
 
         // ★ Entity の List を取る（Repositoryじゃない）
-        List<TaskSchedule> all = schedules.findByTask_UserId(userId);
+       List<TaskSchedule> all = schedules.findByTask_UserIdAndTask_ArchivedFalse(userId);
 
         // 完了ログ（taskId@date）
         Set<String> done = new HashSet<>();
