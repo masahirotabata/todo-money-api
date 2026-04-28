@@ -94,6 +94,8 @@ public class CalendarController {
 
                 Task task = sch.getTask();
 
+                if (task == null || task.isArchived()) continue;
+
                 CalendarItem item = new CalendarItem();
                 item.taskId = task.getId();
                 item.title = task.getTitle();
