@@ -7,6 +7,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
+import java.time.OffsetDateTime;
 
 @Entity
 @Table(
@@ -30,6 +31,9 @@ public class User {
   @Column(name = "device_id", unique = true)
   private String deviceId;
 
+  @Column(name = "created_at", nullable = false)
+  private OffsetDateTime createdAt = OffsetDateTime.now();
+
   // ===== getter =====
   public Long getId() {
     return id;
@@ -45,6 +49,10 @@ public class User {
 
   public String getDeviceId() {
     return deviceId;
+  }
+
+  public OffsetDateTime getCreatedAt() {
+    return createdAt;
   }
 
   // ===== setter =====
