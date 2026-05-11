@@ -31,7 +31,7 @@ public class User {
   @Column(name = "device_id", unique = true)
   private String deviceId;
 
-  @Column(name = "created_at", nullable = false)
+  @Column(name = "created_at")
   private OffsetDateTime createdAt = OffsetDateTime.now();
 
   // ===== getter =====
