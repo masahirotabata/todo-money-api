@@ -3,9 +3,12 @@ BEGIN
     IF EXISTS (
         SELECT 1
         FROM information_schema.tables
-        WHERE table_name = 'tasks'
+        WHERE table_schema = 'public'
+          AND table_name = 'tasks'
     ) THEN
-        ALTER TABLE tasks
-        ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false;
+        EXECUTE '
+            ALTER TABLE public.tasks
+            ADD COLUMN IF NOT EXISTS archived boolean NOT NULL DEFAULT false
+        ';
     END IF;
 END $$;
