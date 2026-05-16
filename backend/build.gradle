@@ -19,7 +19,7 @@ repositories {
 }
 
 springBoot {
-    mainClass = 'com.example.todomoney.BackendApplication'
+    mainClass = 'com.example.todomoney.TodoMoneyApplication'
 }
 
 
