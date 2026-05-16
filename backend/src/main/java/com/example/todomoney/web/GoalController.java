@@ -24,6 +24,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import com.example.todomoney.service.TaskService;
 
 @RestController
 @RequestMapping("/api/goals")
@@ -32,12 +36,19 @@ public class GoalController {
   private final GoalRepository goalRepo;
   private final TaskRepository taskRepo;
   private final UserRepository userRepo;
+  private final TaskService taskService;
 
-  public GoalController(GoalRepository goalRepo, TaskRepository taskRepo, UserRepository userRepo) {
-    this.goalRepo = goalRepo;
-    this.taskRepo = taskRepo;
-    this.userRepo = userRepo;
-  }
+  public GoalController(
+    GoalRepository goalRepo,
+    TaskRepository taskRepo,
+    UserRepository userRepo,
+    TaskService taskService
+) {
+  this.goalRepo = goalRepo;
+  this.taskRepo = taskRepo;
+  this.userRepo = userRepo;
+  this.taskService = taskService;
+}
 
   public record CreateGoalRequest(@NotBlank String title, @NotNull @Min(1) Double annualIncome) {}
   public record AddTaskRequest(@NotBlank String title) {}
@@ -114,6 +125,16 @@ public class GoalController {
     g = goalRepo.save(g);
     return toItem(g);
   }
+
+  @DeleteMapping("/{goalId}")
+public ResponseEntity<Void> deleteGoal(
+        @PathVariable Long goalId,
+        HttpServletRequest req
+) {
+    Long userId = AuthUtil.requireUserId(req);
+    taskService.deleteGoal(userId, goalId);
+    return ResponseEntity.noContent().build();
+}
 
   private GoalListItem toItem(Goal g) {
     long taskCount = taskRepo.countByGoal(g);

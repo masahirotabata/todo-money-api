@@ -14,6 +14,9 @@ import com.example.todomoney.repo.CurrencyEventRepository;
 import com.example.todomoney.repo.GoalRepository;
 import com.example.todomoney.repo.TaskRepository;
 import com.example.todomoney.repo.UserRepository;
+import java.util.List;
+import com.example.todomoney.entity.Goal;
+
 
 @Service
 public class TaskService {
@@ -138,4 +141,21 @@ public class TaskService {
     task.setUpdatedAt(Instant.now());
     taskRepo.save(task);
   }
+  @Transactional
+public void deleteGoal(long userId, long goalId) {
+  var goal = goalRepo.findById(goalId)
+      .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "goal not found"));
+
+  var goalOwnerId = (goal.getUser() != null) ? goal.getUser().getId() : null;
+  if (goalOwnerId == null || goalOwnerId.longValue() != userId) {
+    throw new ResponseStatusException(HttpStatus.FORBIDDEN, "not your goal");
+  }
+
+  var tasks = taskRepo.findByGoal(goal);
+  taskRepo.deleteAll(tasks);
+
+  goalRepo.delete(goal);
 }
+}
+
+

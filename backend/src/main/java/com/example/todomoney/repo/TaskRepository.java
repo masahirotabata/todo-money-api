@@ -15,5 +15,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
 	List<Task> findByGoalOrderByIdDesc(Goal goal);
 	long countByGoal(Goal goal);
 	long countByGoalAndCompletedTrue(Goal goal);
+    List<Task> findByGoal(Goal goal);
 
 }
