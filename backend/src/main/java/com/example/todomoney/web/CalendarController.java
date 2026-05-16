@@ -104,9 +104,11 @@ public class CalendarController {
                 item.date = cur;
                 item.completed = done.contains(task.getId() + "@" + cur);
 
-                task.getTags().forEach(tag ->
+                if (task.getTags() != null) {
+                    task.getTags().forEach(tag ->
                         item.tags.add(new TagDto(tag.getId(), tag.getName(), tag.getColor()))
-                );
+                    );
+                }
 
                 out.add(item);
             }
