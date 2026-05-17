@@ -1,5 +1,7 @@
 package com.example.todomoney.web;
 
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -38,10 +40,12 @@ public class AuthController {
     if (userRepo.findByEmail(req.email()).isPresent()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "email already exists");
     }
+
     User u = new User();
     u.setEmail(req.email().toLowerCase());
     u.setPasswordHash(encoder.encode(req.password()));
     u = userRepo.save(u);
+
     return new AuthResponse(jwt.issueToken(u.getId(), u.getEmail()));
   }
 
@@ -49,9 +53,24 @@ public class AuthController {
   public AuthResponse login(@RequestBody LoginRequest req) {
     var u = userRepo.findByEmail(req.email().toLowerCase())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid credentials"));
+
     if (!encoder.matches(req.password(), u.getPasswordHash())) {
       throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid credentials");
     }
+
+    return new AuthResponse(jwt.issueToken(u.getId(), u.getEmail()));
+  }
+
+  @PostMapping("/guest")
+  public AuthResponse guestLogin() {
+    String guestEmail = "guest_" + UUID.randomUUID() + "@guest.local";
+    String guestPassword = UUID.randomUUID().toString();
+
+    User u = new User();
+    u.setEmail(guestEmail);
+    u.setPasswordHash(encoder.encode(guestPassword));
+    u = userRepo.save(u);
+
     return new AuthResponse(jwt.issueToken(u.getId(), u.getEmail()));
   }
 }
