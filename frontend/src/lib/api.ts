@@ -1,6 +1,9 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://todo-money-api.onrender.com";
 
+// API Base URL
+// =====================
+
 // =====================
 // Token
 // =====================
@@ -118,12 +121,6 @@ export async function login(email: string, password: string) {
   return request<{ token: string }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
-  });
-}
-
-export async function guestLogin() {
-  return request<{ token: string }>("/api/auth/guest", {
-    method: "POST",
   });
 }
 

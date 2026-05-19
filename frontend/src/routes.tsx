@@ -1,7 +1,6 @@
 import CalendarPage from "./pages/CalendarPage";
 import TagsPage from "./pages/TagsPage";
 import HistoryPage from "./pages/HistoryPage";
-import SchedulePage from "./pages/SchedulePage";
 
 export const routes = [
   // ...既存
