@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { login, register, setToken } from "../lib/api";
+import {
+  login,
+  register,
+  guestLogin,
+  setToken,
+} from "../lib/api";
 
 export default function LoginPage() {
   const nav = useNavigate();
@@ -15,6 +20,7 @@ export default function LoginPage() {
 
   async function onSubmit() {
     if (busy) return;
+
     setError(null);
 
     const trimmedEmail = email.trim();
@@ -30,13 +36,17 @@ export default function LoginPage() {
     try {
       if (mode === "register") {
         const data = await register(trimmedEmail, trimmedPassword);
+
         setToken(data.token);
+
         nav(from, { replace: true });
         return;
       }
 
       const data = await login(trimmedEmail, trimmedPassword);
+
       setToken(data.token);
+
       nav(from, { replace: true });
     } catch (e: any) {
       if (mode === "register" && e?.status === 409) {
@@ -52,9 +62,104 @@ export default function LoginPage() {
     }
   }
 
+  async function handleGuestLogin() {
+    if (busy) return;
+
+    setError(null);
+    setBusy(true);
+
+    try {
+      const data = await guestLogin();
+
+      setToken(data.token);
+
+      nav("/goals", { replace: true });
+    } catch (e: any) {
+      setError(e?.message ?? "ゲストログインに失敗しました。");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="container">
       <div className="card" style={{ maxWidth: 420, margin: "40px auto" }}>
+
+        {/* タイトル */}
+        <div style={{ textAlign: "center", marginBottom: 24 }}>
+          <div
+            style={{
+              fontSize: 42,
+              marginBottom: 8,
+            }}
+          >
+            🐰
+          </div>
+
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 30,
+              fontWeight: 900,
+            }}
+          >
+            TaskMoney 
+            Goal & Habit
+          </h1>
+
+          <div
+            style={{
+              marginTop: 8,
+              color: "#666",
+              fontSize: 14,
+              lineHeight: 1.6,
+            }}
+          >
+            毎日の行動を、
+            <br />
+            “人生の成長”として見える化。
+          </div>
+        </div>
+
+        {/* ゲストログイン */}
+        <button
+          type="button"
+          onClick={handleGuestLogin}
+          disabled={busy}
+          style={{
+            width: "100%",
+            padding: "14px 16px",
+            borderRadius: 16,
+            border: "none",
+            background: "linear-gradient(135deg,#22c55e,#16a34a)",
+            color: "white",
+            fontWeight: 800,
+            fontSize: 16,
+            cursor: "pointer",
+            marginBottom: 18,
+            boxShadow: "0 10px 30px rgba(34,197,94,.25)",
+          }}
+        >
+          {busy ? "..." : "すぐ始める"}
+        </button>
+
+        {/* 区切り */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            marginBottom: 18,
+            color: "#888",
+            fontSize: 12,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: "#ddd" }} />
+          ※アカウント連携する場合はメールアドレス登録が必要です
+          <div style={{ flex: 1, height: 1, background: "#ddd" }} />
+        </div>
+
+        {/* Login/Register切替 */}
         <div className="row-between" style={{ marginBottom: 16 }}>
           <h2 style={{ margin: 0 }}>
             {mode === "login" ? "Login" : "Create Account"}
@@ -68,21 +173,35 @@ export default function LoginPage() {
             }}
             disabled={busy}
           >
-            {mode === "login" ? "Create account" : "Back to login"}
+            {mode === "login"
+              ? "Create account"
+              : "Back to login"}
           </button>
         </div>
 
+        {/* フォーム */}
         <form
           onSubmit={(e) => {
             e.preventDefault();
             onSubmit();
           }}
-          style={{ display: "flex", flexDirection: "column", gap: 12 }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
         >
           <div>
-            <label style={{ display: "block", fontSize: 14, marginBottom: 4 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 14,
+                marginBottom: 4,
+              }}
+            >
               Email
             </label>
+
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -92,15 +211,24 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 boxSizing: "border-box",
-                padding: "8px 10px",
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #ddd",
               }}
             />
           </div>
 
           <div>
-            <label style={{ display: "block", fontSize: 14, marginBottom: 4 }}>
+            <label
+              style={{
+                display: "block",
+                fontSize: 14,
+                marginBottom: 4,
+              }}
+            >
               Password
             </label>
+
             <input
               type="password"
               value={password}
@@ -108,18 +236,40 @@ export default function LoginPage() {
               style={{
                 width: "100%",
                 boxSizing: "border-box",
-                padding: "8px 10px",
+                padding: "10px 12px",
+                borderRadius: 12,
+                border: "1px solid #ddd",
               }}
             />
           </div>
 
           <div style={{ marginTop: 8 }}>
-            <button type="submit" className="primary" disabled={busy}>
-              {busy ? "..." : mode === "login" ? "Login" : "Register"}
+            <button
+              type="submit"
+              className="primary"
+              disabled={busy}
+              style={{
+                width: "100%",
+              }}
+            >
+              {busy
+                ? "..."
+                : mode === "login"
+                ? "Login"
+                : "Register"}
             </button>
           </div>
 
-          {error && <div className="error">{error}</div>}
+          {error && (
+            <div
+              className="error"
+              style={{
+                marginTop: 10,
+              }}
+            >
+              {error}
+            </div>
+          )}
         </form>
       </div>
     </div>
