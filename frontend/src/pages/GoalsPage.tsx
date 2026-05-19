@@ -14,8 +14,6 @@ import {
 } from "../lib/api";
 
 import MoneyRainOverlay from "../components/MoneyRainOverlay";
-import Calender, { DragTaskPayload, ScheduleEvent } from "./Calender";
-import ScheduleModal from "../components/ScheduleModel";
 
 type ScheduleHistoryItem = {
   id: string;
@@ -25,15 +23,78 @@ type ScheduleHistoryItem = {
   title: string;
 };
 
+type LocalSchedule = {
+  id: string;
+  title: string;
+  memo?: string;
+  startDate: string;
+  endDate: string;
+  weekdays?: boolean[];
+  oneShot?: boolean;
+  completedDates?: string[];
+  tags?: string[];
+  taskRef?: {
+    goalId: number;
+    taskId: number;
+  };
+};
+
+type GoalScheduleProgress = {
+  scheduleId: string;
+  goalId: number;
+  goalTitle: string;
+  title: string;
+  startDate: string;
+  endDate: string;
+  total: number;
+  done: number;
+  percent: number;
+  cells: boolean[];
+};
+
+type TabId = "todo" | "history";
+type LifeTagId = "side_business" | "health" | "study" | "output" | "sleep";
+
+type LifeTag = {
+  id: LifeTagId;
+  label: string;
+  statusName: string;
+  emoji: string;
+};
+
+const LIFE_TAGS: LifeTag[] = [
+  { id: "side_business", label: "副業", statusName: "副業力", emoji: "💰" },
+  { id: "health", label: "健康", statusName: "健康", emoji: "💪" },
+  { id: "study", label: "学習", statusName: "学習", emoji: "📚" },
+  { id: "output", label: "発信", statusName: "発信", emoji: "📣" },
+  { id: "sleep", label: "睡眠", statusName: "睡眠", emoji: "🌙" },
+];
+
+type GoalTagMap = Record<number, LifeTagId>;
+
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL ?? "https://todo-money-api.onrender.com";
+
+function getToken() {
+  return localStorage.getItem("todoMoneyToken") ?? "";
+}
+
 function getCurrentUserKey() {
   const token = localStorage.getItem("todoMoneyToken");
   if (!token) return "guest";
 
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.sub ?? payload.userId ?? payload.id ?? token;
+
+    return (
+      payload.sub ??
+      payload.email ??
+      payload.userId ??
+      payload.id ??
+      "user"
+    );
   } catch {
-    return token;
+    return "user";
   }
 }
 
@@ -45,7 +106,24 @@ function scheduleHistoryKey() {
   return `todo-money:scheduleHistory:v1:${getCurrentUserKey()}`;
 }
 
-function loadSchedules(): ScheduleEvent[] {
+function goalTagKey() {
+  return `todo-money:goalTags:v1:${getCurrentUserKey()}`;
+}
+
+function loadGoalTags(): GoalTagMap {
+  try {
+    const raw = localStorage.getItem(goalTagKey());
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveGoalTags(map: GoalTagMap) {
+  localStorage.setItem(goalTagKey(), JSON.stringify(map));
+}
+
+function loadSchedules(): LocalSchedule[] {
   try {
     const raw = localStorage.getItem(scheduleKey());
     return raw ? JSON.parse(raw) : [];
@@ -54,7 +132,7 @@ function loadSchedules(): ScheduleEvent[] {
   }
 }
 
-function saveSchedules(list: ScheduleEvent[]) {
+function saveSchedules(list: LocalSchedule[]) {
   localStorage.setItem(scheduleKey(), JSON.stringify(list));
 }
 
@@ -71,19 +149,113 @@ function saveHistory(list: ScheduleHistoryItem[]) {
   localStorage.setItem(scheduleHistoryKey(), JSON.stringify(list));
 }
 
-function uid() {
-  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+function parseYMD(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
+function ymdToNum(ymd: string) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return y * 10000 + m * 100 + d;
 }
 
-function toYMD(d: Date) {
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+function addDays(d: Date, days: number) {
+  const x = new Date(d);
+  x.setDate(x.getDate() + days);
+  return x;
 }
 
-type TabId = "todo" | "calendar" | "history";
+function occursOnDate(s: LocalSchedule, dateStr: string) {
+  if (s.oneShot || !s.weekdays || s.weekdays.length === 0) {
+    return s.startDate === dateStr;
+  }
+
+  if (ymdToNum(dateStr) < ymdToNum(s.startDate)) return false;
+  if (ymdToNum(dateStr) > ymdToNum(s.endDate)) return false;
+
+  const d = parseYMD(dateStr);
+  return !!s.weekdays[d.getDay()];
+}
+
+function getOccurrenceDates(s: LocalSchedule) {
+  const dates: string[] = [];
+  if (!s.startDate) return dates;
+
+  if (s.oneShot || !s.weekdays || s.weekdays.length === 0 || !s.endDate) {
+    dates.push(s.startDate);
+    return dates;
+  }
+
+  let current = parseYMD(s.startDate);
+  const end = parseYMD(s.endDate);
+
+  while (current <= end) {
+    const dateStr =
+      current.getFullYear() +
+      "-" +
+      String(current.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(current.getDate()).padStart(2, "0");
+
+    if (occursOnDate(s, dateStr)) dates.push(dateStr);
+    current = addDays(current, 1);
+  }
+
+  return dates;
+}
+
+function calcGoalScheduleProgresses(
+  goalId: number,
+  goalTitle: string,
+  schedules: LocalSchedule[]
+): GoalScheduleProgress[] {
+  return schedules
+    .filter((s) => s.taskRef?.goalId === goalId)
+    .map((s) => {
+      const dates = getOccurrenceDates(s);
+      const cells = dates.map((dateStr) =>
+        s.completedDates?.includes(dateStr) ?? false
+      );
+
+      const done = cells.filter(Boolean).length;
+      const total = cells.length;
+      const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+
+      return {
+        scheduleId: s.id,
+        goalId,
+        goalTitle,
+        title: s.title,
+        startDate: s.startDate,
+        endDate: s.endDate,
+        total,
+        done,
+        percent,
+        cells,
+      };
+    })
+    .filter((x) => x.total > 0);
+}
+
+async function deleteGoalApi(goalId: number) {
+  const token = getToken();
+
+  const res = await fetch(`${API_BASE}/api/goals/${goalId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: token ? `Bearer ${token}` : "",
+    },
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || `Goal削除に失敗しました: ${res.status}`);
+  }
+}
+
+function getTag(tagId?: LifeTagId) {
+  return LIFE_TAGS.find((t) => t.id === tagId) ?? LIFE_TAGS[0];
+}
 
 export default function GoalsPage() {
   const nav = useNavigate();
@@ -95,24 +267,45 @@ export default function GoalsPage() {
 
   const [newTitle, setNewTitle] = useState("副業で月5万");
   const [newIncome, setNewIncome] = useState(600000);
+  const [newGoalTag, setNewGoalTag] = useState<LifeTagId>("side_business");
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const [rainSeed, setRainSeed] = useState(0);
-  const prevTotalEarnedRef = useRef<number>(0);
-
-  const [schedules, setSchedules] = useState<ScheduleEvent[]>(() => loadSchedules());
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [modalBaseDate, setModalBaseDate] = useState<Date>(new Date());
-  const [modalInitial, setModalInitial] = useState<Partial<ScheduleEvent> | null>(null);
-  const [modalClickedDate, setModalClickedDate] = useState<string | null>(null);
-
-  const [openGoals, setOpenGoals] = useState<Record<number, boolean>>({});
-  const [history, setHistory] = useState<ScheduleHistoryItem[]>(() => loadHistory());
+  const [goalTags, setGoalTags] = useState<GoalTagMap>(() => loadGoalTags());
   const [activeTab, setActiveTab] = useState<TabId>("todo");
 
+  const [rainSeed, setRainSeed] = useState(0);
+  const [moneyGain, setMoneyGain] = useState("");
+  const [showMoneyGain, setShowMoneyGain] = useState(false);
+  const prevTotalEarnedRef = useRef<number>(0);
+
+  const [openGoals, setOpenGoals] = useState<Record<number, boolean>>({});
+  const [history, setHistory] = useState<ScheduleHistoryItem[]>(() =>
+    loadHistory()
+  );
+  const [schedules, setSchedules] = useState<LocalSchedule[]>(() =>
+    loadSchedules()
+  );
+
+  function refreshToday() {
+    setSchedules(loadSchedules());
+    setHistory(loadHistory());
+    setGoalTags(loadGoalTags());
+  }
+
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 1500);
+    const timer = setTimeout(() => setShowSplash(false), 800);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const onFocus = () => refreshToday();
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onFocus);
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onFocus);
+    };
   }, []);
 
   async function refreshGoals() {
@@ -130,6 +323,7 @@ export default function GoalsPage() {
       try {
         setError(null);
         await refreshGoals();
+        refreshToday();
       } catch (e: any) {
         setError(e?.message ?? "読み込みに失敗しました");
       }
@@ -159,26 +353,140 @@ export default function GoalsPage() {
     prevTotalEarnedRef.current = total;
   }, [goals]);
 
-  const totalEarned = useMemo(() => {
-    return goals.reduce((sum, g: any) => sum + (g.earnedAmount ?? 0), 0);
-  }, [goals]);
-
-  useEffect(() => {
-    saveSchedules(schedules);
-  }, [schedules]);
-
   useEffect(() => {
     saveHistory(history);
   }, [history]);
+
+  useEffect(() => {
+    saveGoalTags(goalTags);
+  }, [goalTags]);
+
+  const allProgressItems = useMemo(() => {
+    return goals.flatMap((g: any) =>
+      calcGoalScheduleProgresses(g.id, g.title, schedules)
+    );
+  }, [goals, schedules]);
+
+  const allProgressTotal = allProgressItems.reduce((sum, x) => sum + x.total, 0);
+  const allProgressDone = allProgressItems.reduce((sum, x) => sum + x.done, 0);
+  const allProgressPercent =
+    allProgressTotal === 0
+      ? 0
+      : Math.round((allProgressDone / allProgressTotal) * 100);
+
+  const statusItems = useMemo(() => {
+    return LIFE_TAGS.map((tag) => {
+      const goalIds = goals
+        .filter((g: any) => (goalTags[g.id] ?? "side_business") === tag.id)
+        .map((g: any) => g.id);
+
+      const items = allProgressItems.filter((item) =>
+        goalIds.includes(item.goalId)
+      );
+
+      const total = items.reduce((sum, x) => sum + x.total, 0);
+      const done = items.reduce((sum, x) => sum + x.done, 0);
+      const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+      const level = Math.floor(done / 5) + 1;
+
+      return {
+        tag,
+        total,
+        done,
+        percent,
+        level,
+      };
+    }).filter(
+      (x) =>
+        x.total > 0 ||
+        goals.some(
+          (g: any) => (goalTags[g.id] ?? "side_business") === x.tag.id
+        )
+    );
+  }, [goals, goalTags, allProgressItems]);
 
   async function onCreateGoal() {
     setError(null);
     try {
       await createGoal(newTitle, Number(newIncome));
-      await refreshGoals();
+      const latest = await listGoals();
+      setGoals(latest);
+
+      const created = latest
+        .slice()
+        .sort((a: any, b: any) => Number(b.id) - Number(a.id))[0] as any;
+
+      if (created?.id) {
+        const next = { ...goalTags, [created.id]: newGoalTag };
+        setGoalTags(next);
+        saveGoalTags(next);
+      }
+
+      setShowCreateModal(false);
     } catch (e: any) {
       setError(e?.message ?? "Goal作成に失敗しました");
     }
+  }
+
+  async function onDeleteGoal(goalId: number, title: string) {
+    if (
+      !confirm(
+        `「${title}」を削除しますか？\n紐づくカレンダースケジュールも削除されます。`
+      )
+    ) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await deleteGoalApi(goalId);
+
+      const deletedScheduleIds = schedules
+        .filter((s) => s.taskRef?.goalId === goalId)
+        .map((s) => s.id);
+
+      const nextSchedules = schedules.filter((s) => s.taskRef?.goalId !== goalId);
+      setSchedules(nextSchedules);
+      saveSchedules(nextSchedules);
+
+      const nextHistory = history.filter(
+        (h) => !deletedScheduleIds.includes(h.scheduleId)
+      );
+      setHistory(nextHistory);
+      saveHistory(nextHistory);
+
+      setOpenGoals((prev) => {
+        const next = { ...prev };
+        delete next[goalId];
+        return next;
+      });
+
+      setTasksByGoal((prev) => {
+        const next = { ...prev };
+        delete next[goalId];
+        return next;
+      });
+
+      setGoalTags((prev) => {
+        const next = { ...prev };
+        delete next[goalId];
+        saveGoalTags(next);
+        return next;
+      });
+
+      await refreshGoals();
+    } catch (e: any) {
+      setError(e?.message ?? "Goal削除に失敗しました");
+    }
+  }
+
+  function onChangeGoalTag(goalId: number, tagId: LifeTagId) {
+    setGoalTags((prev) => {
+      const next = { ...prev, [goalId]: tagId };
+      saveGoalTags(next);
+      return next;
+    });
   }
 
   async function onAddTask(goalId: number) {
@@ -197,10 +505,20 @@ export default function GoalsPage() {
 
   async function onComplete(taskId: number, goalId: number) {
     setError(null);
+
     try {
-      await completeTask(taskId);
+      const result: any = await completeTask(taskId);
+      const reward = result?.rewardAmount ?? result?.amount ?? 0;
+
+      setMoneyGain(`💰 +${Math.round(reward)}円`);
+      setShowMoneyGain(true);
+      navigator.vibrate?.(120);
+
+      window.setTimeout(() => setShowMoneyGain(false), 1800);
+
       await refreshGoals();
       await loadTasks(goalId);
+      refreshToday();
       setRainSeed(Date.now());
     } catch (e: any) {
       setError(e?.message ?? "完了処理に失敗しました");
@@ -243,52 +561,6 @@ export default function GoalsPage() {
     }
   }
 
-  function openNewSchedule(
-    date: Date,
-    initial?: Partial<ScheduleEvent>,
-    clickedDate?: string
-  ) {
-    setModalBaseDate(date);
-    setModalInitial(initial ?? null);
-    setModalClickedDate(clickedDate ?? null);
-    setModalOpen(true);
-  }
-
-  function handleDropTask(date: Date, task: DragTaskPayload) {
-    openNewSchedule(
-      date,
-      {
-        title: task.title,
-        memo: "",
-        taskRef: { goalId: task.goalId, taskId: task.taskId },
-      },
-      toYMD(date)
-    );
-  }
-
-  function handleSaveSchedule(data: Omit<ScheduleEvent, "id">, editingId?: string) {
-    setSchedules((prev) => {
-      if (editingId) {
-        return prev.map((x) =>
-          x.id === editingId ? { ...x, ...data, id: editingId } : x
-        );
-      }
-      return [...prev, { ...data, id: uid() }];
-    });
-    setModalOpen(false);
-  }
-
-  function handleDeleteSchedule(id: string) {
-    if (!confirm("このスケジュールを削除しますか？")) return;
-    setSchedules((prev) => prev.filter((x) => x.id !== id));
-    setModalOpen(false);
-  }
-
-  function handleEventClick(ev: ScheduleEvent, dateStr: string) {
-    const [y, m, d] = dateStr.split("-").map(Number);
-    openNewSchedule(new Date(y, m - 1, d), ev, dateStr);
-  }
-
   async function handleToggleTasks(goalId: number) {
     setError(null);
     const isOpen = openGoals[goalId];
@@ -299,91 +571,12 @@ export default function GoalsPage() {
     }
 
     try {
-      if (!tasksByGoal[goalId]) {
-        await loadTasks(goalId);
-      }
+      if (!tasksByGoal[goalId]) await loadTasks(goalId);
       setOpenGoals((m) => ({ ...m, [goalId]: true }));
     } catch (e: any) {
       setError(e?.message ?? "タスク読み込みに失敗しました");
     }
   }
-
-  function handleToggleDoneForDate(scheduleId: string, dateStr: string, done: boolean) {
-    let scheduleTitle = "";
-
-    setSchedules((prev) =>
-      prev.map((ev) => {
-        if (ev.id !== scheduleId) return ev;
-
-        scheduleTitle = ev.title;
-        const prevDates = ev.completedDates ?? [];
-        const nextDates = done
-          ? prevDates.includes(dateStr)
-            ? prevDates
-            : [...prevDates, dateStr]
-          : prevDates.filter((d) => d !== dateStr);
-
-        return { ...ev, completedDates: nextDates };
-      })
-    );
-
-    if (done) {
-      setRainSeed(Date.now());
-      setHistory((prev) => [
-        ...prev,
-        {
-          id: uid(),
-          scheduleId,
-          date: dateStr,
-          doneAt: new Date().toISOString(),
-          title: scheduleTitle,
-        },
-      ]);
-    } else {
-      setHistory((prev) =>
-        prev.filter((h) => !(h.scheduleId === scheduleId && h.date === dateStr))
-      );
-    }
-  }
-
-  const dragTaskList = useMemo(() => {
-    const items: { goalId: number; goalTitle: string; task: TaskItem }[] = [];
-
-    for (const g of goals) {
-      const ts = tasksByGoal[g.id] ?? [];
-      ts
-        .filter((t) => !t.completed)
-        .forEach((t) =>
-          items.push({ goalId: g.id, goalTitle: g.title, task: t })
-        );
-    }
-
-    return items;
-  }, [goals, tasksByGoal]);
-
-  const todayYmd = toYMD(new Date());
-
-  const todaySchedules = useMemo(() => {
-    return schedules.filter((ev: any) => {
-      const start = ev.startDate ?? ev.date ?? ev.start ?? "";
-      const end = ev.endDate ?? ev.date ?? ev.end ?? start;
-      if (!start) return false;
-      return start <= todayYmd && todayYmd <= end;
-    });
-  }, [schedules, todayYmd]);
-
-  const uniqueTodaySchedules = Array.from(
-    new Map(todaySchedules.map((ev: any) => [ev.title, ev])).values()
-  );
-  
-  const todayCompletedCount = uniqueTodaySchedules.filter((ev: any) =>
-    (ev.completedDates ?? []).includes(todayYmd)
-  ).length;
-  
-  const todayTotalCount = uniqueTodaySchedules.length;
-  const todayProgress =
-    todayTotalCount === 0 ? 0 : Math.round((todayCompletedCount / todayTotalCount) * 100);
-  const todayEarned = todayCompletedCount * 164;
 
   if (showSplash) {
     return (
@@ -396,87 +589,149 @@ export default function GoalsPage() {
   }
 
   return (
-    <div className="container">
+    <div className="container" style={ui.container}>
       <MoneyRainOverlay seed={rainSeed} />
 
-      <div className="row-between">
-        <h1>Goals</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={onDeleteAccount}
-            style={{
-              color: "#b91c1c",
-              borderColor: "#fecaca",
-            }}
-          >
-            Delete Account
+      {showMoneyGain && <div style={ui.moneyGain}>{moneyGain}</div>}
+
+      <style>
+        {`
+          @keyframes gainPop {
+            0% { opacity: 0; transform: translateX(-50%) scale(0.6); }
+            15% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+            70% { opacity: 1; transform: translateX(-50%) scale(1); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-40px) scale(0.95); }
+          }
+        `}
+      </style>
+
+      <div className="card" style={{ ...ui.progressCard, marginBottom: 14 }}>
+        <div style={ui.topButtons}>
+          <button onClick={onDeleteAccount} style={ui.deleteMini}>
+            Delete
           </button>
-          <button onClick={logout}>Logout</button>
+          <button onClick={logout} style={ui.logoutMini}>
+            Logout
+          </button>
         </div>
-      </div>
 
-      <div className="small" style={{ marginBottom: 12 }}>
-        合計獲得（推定）： <b>{totalEarned.toFixed(2)} USD</b>
-      </div>
-
-      <div className="card" style={{ marginBottom: 16 }}>
         <div className="row-between" style={{ marginBottom: 8 }}>
           <div>
-            <h2 style={{ margin: 0 }}>今日の進捗</h2>
-            <div className="small muted">
-              {todayCompletedCount}/{todayTotalCount} 件完了
+            <h1 style={{ marginBottom: 4 }}>目標の進捗</h1>
+            <div style={ui.progressMuted}>
+              {allProgressDone}/{allProgressTotal}日 完了
             </div>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800 }}>{todayProgress}%</div>
+          <div style={ui.progressPercent}>
+            {allProgressPercent}%
+          </div>
         </div>
 
-        <div
-          style={{
-            height: 14,
-            background: "#E5E7EB",
-            borderRadius: 999,
-            overflow: "hidden",
-          }}
-        >
-        <div
-          style={{
-              width: `${todayProgress}%`,
-              height: "100%",
-              borderRadius: 999,
-              transition: "0.4s ease",
-              transform: todayProgress === 100 ? "scale(1.02)" : "scale(1)",
-              boxShadow: todayProgress === 100 ? "0 0 12px #FACC15" : "none",
-              background:
-                todayProgress === 100
-                  ? "#FACC15"
-                  : "linear-gradient(90deg, #38BDF8, #22C55E)",
-            }}
-          />
+        {allProgressItems.length === 0 ? (
+         <div style={ui.progressMuted}>
+            カレンダーでタスクをスケジュール登録すると、ここに小タスク進捗が表示されます。
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {allProgressItems.slice(0, 3).map((item) => (
+              <div key={item.scheduleId}>
+                <div className="row-between" style={{ marginBottom: 6 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={ui.progressItemTitle}>{item.title}</div>
+                    <div className="small muted">
+                      {item.goalTitle} / {item.total}日計画
+                    </div>
+                  </div>
+
+                  <div className="small muted">
+                    {item.done}/{item.total}日・{item.percent}%
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${Math.min(
+                      item.total,
+                      28
+                    )}, minmax(8px, 1fr))`,
+                    gap: 3,
+                  }}
+                >
+                  {item.cells.map((done, idx) => (
+                    <div
+                      key={idx}
+                      title={done ? "完了" : "未完了"}
+                      style={{
+                        height: 16,
+                        borderRadius: 4,
+                        background: done ? "#22C55E" : "rgba(0,0,0,0.08)",
+                        boxShadow: done
+                          ? "0 0 6px rgba(34,197,94,0.28)"
+                          : "none",
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div style={{ marginTop: 16 }}>
+        <div style={ui.statusTitle}>
+          人生ステータス
         </div>
-        <div style={{ marginTop: 10, fontWeight: 700 }}>
-          ¥ 今日の収益：+{todayEarned}円
+
+          {statusItems.length === 0 ? (
+            <div className="small muted">
+              目標にタグを付けると、副業力・健康・学習などのステータスが育ちます。
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {statusItems.map((s) => (
+                <div key={s.tag.id}>
+                  <div className="row-between" style={{ marginBottom: 4 }}>
+                    <div style={{ fontWeight: 900, fontSize: 18 }}>
+                      {s.tag.emoji} {s.tag.statusName} Lv{s.level}
+                    </div>
+                    <div className="small muted">
+                      {s.done}/{s.total}日・{s.percent}%
+                    </div>
+                  </div>
+
+                  <div style={ui.statusBar}>
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${s.percent}%`,
+                        borderRadius: 999,
+                        background: "#22C55E",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 16, padding: "6px 8px" }}>
-        <div style={{ display: "flex", gap: 8, justifyContent: "space-around" }}>
+      <div className="card" style={ui.segmentCard}>
+        <div style={{ display: "flex", gap: 8 }}>
           {[
             { id: "todo" as TabId, label: "ToDo" },
-            { id: "calendar" as TabId, label: "カレンダー" },
             { id: "history" as TabId, label: "履歴" },
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                refreshToday();
+              }}
               style={{
-                flex: 1,
-                padding: "8px 0",
-                borderRadius: 999,
-                border: "none",
-                fontSize: 13,
-                fontWeight: 600,
-                cursor: "pointer",
-                background: activeTab === tab.id ? "black" : "rgba(0,0,0,0.03)",
+                ...ui.segmentButton,
+                background: activeTab === tab.id ? "black" : "rgba(0,0,0,0.04)",
                 color: activeTab === tab.id ? "white" : "#555",
               }}
             >
@@ -488,270 +743,126 @@ export default function GoalsPage() {
 
       {activeTab === "todo" && (
         <>
-          <div className="card" style={{ marginBottom: 16 }}>
-            <h2 style={{ marginTop: 0 }}>新規目標</h2>
-
-            <label>Title</label>
-            <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-
-            <label>Annual Income（JPY換算でもOK）</label>
-            <input
-              value={newIncome}
-              onChange={(e) => setNewIncome(Number(e.target.value))}
-              inputMode="numeric"
-            />
-
-            <div style={{ marginTop: 14 }}>
-              <button className="primary" onClick={onCreateGoal}>
-                Create
-              </button>
-            </div>
-          </div>
-
           {error && <div className="error">{error}</div>}
 
-          {goals.map((g: any) => (
-            <div className="card" key={g.id} style={{ marginBottom: 14 }}>
-              <div className="row-between">
-                <div>
-                  <div style={{ fontSize: 22, fontWeight: 700 }}>{g.title}</div>
-                  <div className="small">
-                    annualIncome: {g.annualIncome} / day:{" "}
-                    {(g.annualIncome / g.daysPerYear).toFixed(2)} / taskReward:{" "}
-                    {g.perTaskReward.toFixed(2)}
-                  </div>
-                  <div className="small">
-                    tasks: {g.completedTaskCount}/{g.taskCount} / earned:{" "}
-                    {g.earnedAmount.toFixed(2)} USD
-                  </div>
-                </div>
-
-                <div className="row">
-                  <button onClick={() => onAddTask(g.id)}>+ Task</button>
-                  <button onClick={() => handleToggleTasks(g.id)}>
-                    {openGoals[g.id] ? "Hide Tasks" : "Show Tasks"}
-                  </button>
-                </div>
-              </div>
-
-              {openGoals[g.id] && tasksByGoal[g.id] && (
-                <>
-                  <hr />
-                  {tasksByGoal[g.id].length === 0 ? (
-                    <div className="small">タスクがありません</div>
-                  ) : (
-                    tasksByGoal[g.id].map((t) => (
-                      <div key={t.id} className="task">
-                        <div style={{ flex: 1 }}>
-                          <div
-                            style={{
-                              fontWeight: 600,
-                              cursor: "grab",
-                              userSelect: "none",
-                            }}
-                            draggable={!t.completed}
-                            onDragStart={(e) => {
-                              const payload: DragTaskPayload = {
-                                kind: "task",
-                                goalId: g.id,
-                                taskId: t.id,
-                                title: t.title,
-                              };
-                              e.dataTransfer.setData(
-                                "application/json",
-                                JSON.stringify(payload)
-                              );
-                              e.dataTransfer.effectAllowed = "copy";
-                            }}
-                            title={
-                              t.completed
-                                ? "完了済みはドラッグ不可"
-                                : "ドラッグしてカレンダーへ"
-                            }
-                          >
-                            {t.title}{" "}
-                            {!t.completed && (
-                              <span className="badge" style={{ marginLeft: 8 }}>
-                                drag
-                              </span>
-                            )}
-                          </div>
-                          <div className="small">
-                            {t.completed ? (
-                              <span className="badge">completed</span>
-                            ) : (
-                              <span className="badge">todo</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="row" style={{ gap: 8 }}>
-                          <button onClick={() => onEditTask(t, g.id)}>Edit</button>
-                          {!t.completed && (
-                            <button
-                              className="primary"
-                              onClick={() => onComplete(t.id, g.id)}
-                            >
-                              Complete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </>
-              )}
+          {goals.length === 0 ? (
+            <div style={ui.emptyArea}>
+              <div style={ui.emptyIcon}>🎯</div>
+              <h2 style={ui.emptyTitle}>目標を追加しよう</h2>
+              <p style={ui.emptyText}>
+                右下の＋ボタンから
+                <br />
+                目標を登録できます
+              </p>
             </div>
-          ))}
-        </>
-      )}
-
-      {activeTab === "calendar" && (
-        <div className="card" style={{ marginBottom: 16 }}>
-          <div className="row-between">
-            <h2 style={{ marginTop: 0 }}>カレンダー</h2>
-            <div className="small muted">日付クリック or タスクをD&D</div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 8,
-              display: "grid",
-              gridTemplateColumns: "1fr",
-              gap: 16,
-              alignItems: "flex-start",
-            }}
-          >
-            <div
-              style={{
-                background: "#fafafa",
-                borderRadius: 12,
-                padding: 8,
-                maxHeight: 520,
-                overflowY: "auto",
-              }}
-            >
-              <div className="row-between" style={{ marginBottom: 8 }}>
-                <h3 style={{ margin: 0, fontSize: 16 }}>タスクリスト</h3>
-                <div className="small muted">{dragTaskList.length}件</div>
-              </div>
-              <div className="small muted" style={{ marginBottom: 6 }}>
-                右側のカレンダーにドラッグandドロップしてスケジュール登録
+          ) : (
+            <>
+              <div style={ui.sectionHeader}>
+                <div>
+                  <div style={ui.sectionLabel}>登録中の目標</div>
+                  <h2 style={ui.sectionTitle}>{goals.length}件</h2>
+                </div>
               </div>
 
-              {dragTaskList.length === 0 ? (
-                <div className="small muted">未完了タスクはありません</div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {dragTaskList.map(({ goalId, goalTitle, task }) => (
-                    <div
-                      key={`${goalId}-${task.id}`}
-                      style={{
-                        padding: "6px 8px",
-                        borderRadius: 10,
-                        border: "1px solid rgba(0,0,0,0.08)",
-                        background: "rgba(0,0,0,0.02)",
-                        cursor: "grab",
-                        userSelect: "none",
-                        fontSize: 12,
-                      }}
-                      draggable
-                      onDragStart={(e) => {
-                        const payload: DragTaskPayload = {
-                          kind: "task",
-                          goalId,
-                          taskId: task.id,
-                          title: task.title,
-                        };
-                        e.dataTransfer.setData(
-                          "application/json",
-                          JSON.stringify(payload)
-                        );
-                        e.dataTransfer.effectAllowed = "copy";
-                      }}
-                      title={`${goalTitle} / ${task.title}`}
-                    >
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          marginBottom: 2,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {task.title}
+              {goals.map((g: any) => {
+                const tag = getTag(goalTags[g.id]);
+
+                return (
+                  <div className="card" key={g.id} style={{ ...ui.card, marginBottom: 14 }}>
+                    <div style={ui.goalHeader}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={ui.goalTitle}>{g.title}</div>
+
+                        <div style={{ marginTop: 8 }}>
+                          <select
+                            value={goalTags[g.id] ?? "side_business"}
+                            onChange={(e) =>
+                              onChangeGoalTag(g.id, e.target.value as LifeTagId)
+                            }
+                            style={ui.goalSelect}
+                          >
+                            {LIFE_TAGS.map((tag) => (
+                              <option key={tag.id} value={tag.id}>
+                                {tag.emoji} {tag.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="small muted" style={{ marginTop: 8 }}>
+                          {tag.statusName}を育てる目標
+                        </div>
                       </div>
-                      <div className="small muted">{goalTitle}</div>
+                    </div>
+
+                    <div style={ui.goalActions}>
+                      <button onClick={() => onAddTask(g.id)} style={ui.actionBtn}>
+                        + Task
+                      </button>
+                      <button onClick={() => handleToggleTasks(g.id)} style={ui.actionBtn}>
+                        {openGoals[g.id] ? "Hide Tasks" : "Show Tasks"}
+                      </button>
                       <button
-                        type="button"
-                        style={{ marginTop: 6, padding: "6px 10px", fontSize: 12 }}
-                        onClick={() =>
-                          openNewSchedule(
-                            new Date(),
-                            {
-                              title: task.title,
-                              memo: "",
-                              taskRef: { goalId, taskId: task.id },
-                            },
-                            todayYmd
-                          )
-                        }
+                        onClick={() => onDeleteGoal(g.id, g.title)}
+                        style={ui.dangerBtn}
                       >
-                        スケジュール登録
+                        削除
                       </button>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <div style={{ overflowX: "auto" }}>
-              <Calender
-                events={schedules}
-                onDayClick={(d) => openNewSchedule(d, undefined, toYMD(d))}
-                onDropTask={handleDropTask}
-                onEventClick={handleEventClick}
-              />
-            </div>
-          </div>
-        </div>
+                    {openGoals[g.id] && tasksByGoal[g.id] && (
+                      <>
+                        <hr />
+                        {tasksByGoal[g.id].length === 0 ? (
+                          <div className="small">タスクがありません</div>
+                        ) : (
+                          tasksByGoal[g.id].map((t) => (
+                            <div key={t.id} style={ui.taskRow}>
+                              <div style={ui.taskMain}>
+                                <div style={ui.taskTitle}>{t.title}</div>
+                                <span style={ui.taskBadge}>
+                                  {t.completed ? "completed" : "todo"}
+                                </span>
+                              </div>
+
+                              <div style={ui.taskActions}>
+                                <button onClick={() => onEditTask(t, g.id)} style={ui.taskEditBtn}>
+                                  Edit
+                                </button>
+
+                                {!t.completed && (
+                                  <button
+                                    onClick={() => onComplete(t.id, g.id)}
+                                    style={ui.taskCompleteBtn}
+                                  >
+                                    Complete
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </>
       )}
-
-      <ScheduleModal
-        open={modalOpen}
-        baseDate={modalBaseDate}
-        initial={modalInitial}
-        clickedDate={modalClickedDate ?? undefined}
-        onClose={() => setModalOpen(false)}
-        onSave={handleSaveSchedule}
-        onDelete={handleDeleteSchedule}
-        onToggleDoneForDate={handleToggleDoneForDate}
-      />
 
       {activeTab === "history" && (
         <>
           {history.length === 0 ? (
-            <div className="card">
+            <div className="card" style={ui.card}>
               <h2 style={{ marginTop: 0 }}>タスク履歴</h2>
-              <div className="small muted">
-                まだ「この日だけ完了」の履歴はありません
-              </div>
+              <div className="small muted">まだ履歴はありません</div>
             </div>
           ) : (
-            <div className="card" style={{ marginBottom: 16 }}>
+            <div className="card" style={{ ...ui.card, marginBottom: 16 }}>
               <h2 style={{ marginTop: 0 }}>タスク履歴</h2>
-              <div className="small muted">
-                カレンダーから「この日だけ完了」にした履歴
-              </div>
-              <ul
-                style={{
-                  marginTop: 8,
-                  paddingLeft: 16,
-                  maxHeight: 260,
-                  overflowY: "auto",
-                }}
-              >
+              <ul style={ui.historyList}>
                 {history
                   .slice()
                   .reverse()
@@ -771,6 +882,411 @@ export default function GoalsPage() {
           )}
         </>
       )}
+
+      <button style={ui.fab} onClick={() => setShowCreateModal(true)}>
+        +
+      </button>
+
+      {showCreateModal && (
+        <div style={ui.modalBackdrop} onClick={() => setShowCreateModal(false)}>
+          <div style={ui.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={ui.modalHeader}>
+              <h2 style={ui.modalTitle}>新規目標</h2>
+              <button style={ui.closeButton} onClick={() => setShowCreateModal(false)}>
+                ×
+              </button>
+            </div>
+
+            <div style={ui.modalBody}>
+              <label>Title</label>
+              <input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+
+              <label>タグ</label>
+              <select
+                value={newGoalTag}
+                onChange={(e) => setNewGoalTag(e.target.value as LifeTagId)}
+                style={ui.inputLike}
+              >
+                {LIFE_TAGS.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.emoji} {tag.label}
+                  </option>
+                ))}
+              </select>
+
+              <label>Annual Income（JPY換算でもOK）</label>
+              <input
+                value={newIncome}
+                onChange={(e) => setNewIncome(Number(e.target.value))}
+                inputMode="numeric"
+              />
+
+              <button style={ui.createButton} onClick={onCreateGoal}>
+                目標を作成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+const ui: Record<string, React.CSSProperties> = {
+
+  progressCard: {
+    borderRadius: 28,
+    overflow: "hidden",
+    background: "#111",
+    color: "#fff",
+    border: "none",
+    boxShadow: "0 20px 44px rgba(0,0,0,0.18)",
+  },
+  
+  progressMainTitle: {
+    margin: "0 0 4px",
+    color: "#fff",
+    fontSize: 42,
+    fontWeight: 900,
+    letterSpacing: "-0.05em",
+  },
+  
+  progressPercent: {
+    fontSize: 48,
+    fontWeight: 900,
+    color: "#fff",
+    letterSpacing: "-0.05em",
+  },
+  
+  progressMuted: {
+    color: "rgba(255,255,255,0.62)",
+    fontSize: 13,
+    fontWeight: 700,
+    lineHeight: 1.7,
+  },
+  
+  statusTitle: {
+    color: "#fff",
+    fontWeight: 900,
+    marginBottom: 8,
+    fontSize: 22,
+  },
+  taskRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    width: "100%",
+    padding: "14px 0",
+    borderBottom: "1px solid #eef0f5",
+  },
+  
+  taskMain: {
+    flex: "1 1 auto",
+    minWidth: 0,
+  },
+  
+  taskTitle: {
+    fontSize: 18,
+    fontWeight: 900,
+    lineHeight: 1.35,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+  },
+  
+  taskBadge: {
+    display: "inline-flex",
+    marginTop: 8,
+    padding: "4px 10px",
+    borderRadius: 999,
+    border: "1px solid #e1e5ef",
+    color: "#666",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+  
+  taskActions: {
+    flex: "0 0 auto",
+    display: "flex",
+    gap: 10,
+    alignItems: "center",
+  },
+  
+  taskEditBtn: {
+    minWidth: 70,
+    borderRadius: 14,
+    padding: "12px 14px",
+    background: "#fff",
+    color: "#111",
+  },
+  
+  taskCompleteBtn: {
+    minWidth: 112,
+    borderRadius: 14,
+    padding: "12px 14px",
+    border: "none",
+    background: "#111",
+    color: "#fff",
+    fontWeight: 900,
+  },
+  container: {
+    width: "100%",
+    maxWidth: "100%",
+    overflowX: "hidden",
+    paddingBottom: 120,
+    
+  },
+  card: {
+    borderRadius: 24,
+    overflow: "hidden",
+  },
+  topButtons: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+    marginBottom: 10,
+  },
+  deleteMini: {
+    color: "#b91c1c",
+    borderColor: "#fecaca",
+    fontSize: 12,
+    padding: "8px 10px",
+  },
+  logoutMini: {
+    fontSize: 12,
+    padding: "8px 10px",
+  },
+  progressItemTitle: {
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
+  statusBar: {
+    height: 10,
+    borderRadius: 999,
+    background: "rgba(0,0,0,0.08)",
+    overflow: "hidden",
+  },
+  segmentCard: {
+    marginBottom: 14,
+    padding: "6px 8px",
+    borderRadius: 22,
+    overflow: "hidden",
+  },
+  segmentButton: {
+    flex: 1,
+    padding: "13px 0",
+    borderRadius: 999,
+    border: "none",
+    fontSize: 15,
+    fontWeight: 900,
+    cursor: "pointer",
+  },
+  emptyArea: {
+    minHeight: 360,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    textAlign: "center",
+    padding: "36px 16px 80px",
+  },
+  emptyIcon: {
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    background: "#f5f5f5",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 40,
+    marginBottom: 28,
+  },
+  emptyTitle: {
+    fontSize: 28,
+    fontWeight: 900,
+    margin: "0 0 16px",
+    color: "#111",
+  },
+  emptyText: {
+    fontSize: 17,
+    lineHeight: 1.8,
+    color: "#9b9b9b",
+    margin: 0,
+    fontWeight: 600,
+  },
+  sectionHeader: {
+    margin: "18px 0 12px",
+  },
+  sectionLabel: {
+    color: "#999",
+    fontWeight: 800,
+    fontSize: 14,
+  },
+  sectionTitle: {
+    fontSize: 28,
+    fontWeight: 900,
+    margin: "4px 0 0",
+  },
+  goalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  goalTitle: {
+    fontSize: 28,
+    fontWeight: 900,
+    letterSpacing: "-0.04em",
+  },
+  goalSelect: {
+    padding: "6px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(0,0,0,0.12)",
+    fontWeight: 700,
+    maxWidth: "100%",
+  },
+  goalActions: {
+    display: "flex",
+    gap: 10,
+    flexWrap: "wrap",
+    marginTop: 18,
+  },
+  actionBtn: {
+    borderRadius: 14,
+    padding: "12px 14px",
+    color: "#007aff",
+    background: "#fff",
+  },
+  dangerBtn: {
+    borderRadius: 14,
+    padding: "12px 14px",
+    color: "#b91c1c",
+    borderColor: "#fecaca",
+    background: "#fff",
+  },
+  historyList: {
+    marginTop: 8,
+    paddingLeft: 16,
+    maxHeight: 260,
+    overflowY: "auto",
+  },
+  fab: {
+    position: "fixed",
+    right: 28,
+    bottom: "calc(92px + env(safe-area-inset-bottom))",
+    width: 64,
+    height: 64,
+    minWidth: 64,
+    minHeight: 64,
+    maxWidth: 64,
+    maxHeight: 64,
+    padding: 0,
+    borderRadius: "50%",
+    border: "none",
+    background: "#222",
+    color: "#fff",
+    fontSize: 34,
+    lineHeight: 1,
+    fontWeight: 400,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 16px 28px rgba(0,0,0,0.18)",
+    zIndex: 20,
+  },
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.32)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100000,
+    overflow: "hidden",
+    padding: "24px 16px calc(24px + env(safe-area-inset-bottom))",
+  },
+  modal: {
+    width: "min(520px, calc(100vw - 32px))",
+    maxWidth: "calc(100vw - 32px)",
+    maxHeight: "calc(100dvh - 160px)",
+    background: "#fff",
+    borderRadius: 32,
+    boxShadow: "0 24px 70px rgba(0,0,0,0.24)",
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  },
+  modalHeader: {
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "26px 24px 10px",
+  },
+  modalBody: {
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+    padding: "0 24px 28px",
+  },
+  modalTitle: {
+    fontSize: 28,
+    fontWeight: 900,
+    margin: 0,
+  },
+  closeButton: {
+    width: 56,
+    height: 56,
+    minWidth: 56,
+    minHeight: 56,
+    maxWidth: 56,
+    maxHeight: 56,
+    padding: 0,
+    borderRadius: "50%",
+    border: "none",
+    background: "#f2f2f2",
+    color: "#111",
+    fontSize: 34,
+    lineHeight: 1,
+    fontWeight: 900,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  inputLike: {
+    width: "100%",
+    padding: "12px 14px",
+    borderRadius: 14,
+    border: "1px solid #d7dbe7",
+  },
+  createButton: {
+    width: "100%",
+    minHeight: 56,
+    marginTop: 22,
+    marginBottom: 0,
+    border: "none",
+    borderRadius: 18,
+    background: "#111",
+    color: "#fff",
+    padding: "16px 18px",
+    fontSize: 17,
+    fontWeight: 900,
+  },
+  moneyGain: {
+    position: "fixed",
+    top: "22%",
+    left: "50%",
+    transform: "translateX(-50%)",
+    zIndex: 100000,
+    background: "rgba(0,0,0,0.86)",
+    color: "#FFD700",
+    padding: "16px 28px",
+    borderRadius: 18,
+    fontSize: 34,
+    fontWeight: 900,
+    boxShadow: "0 10px 40px rgba(0,0,0,0.35)",
+    animation: "gainPop 1.8s ease forwards",
+    pointerEvents: "none",
+  },
+};

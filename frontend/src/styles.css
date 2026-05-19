@@ -141,3 +141,18 @@ h2{margin:0; font-size:18px}
   max-width:min(600px, 92vw);
   font-size:13px;
 }
+
+.money-bill {
+  position: absolute;
+  top: -60px;
+  animation: money-fall var(--dur) ease-in var(--delay) forwards;
+}
+
+@keyframes money-fall {
+  0% {
+    transform: translateY(-80px) translateX(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(110vh) translateX(var(--drift)) rotate(var(--rotate));
+  }
+}
