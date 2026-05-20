@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   login,
@@ -18,6 +18,13 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const token = localStorage.getItem("todoMoneyToken");
+    if (token) {
+      nav("/goals", { replace: true });
+    }
+  }, [nav]);
+
   async function onSubmit() {
     if (busy) return;
 
@@ -36,9 +43,13 @@ export default function LoginPage() {
     try {
       if (mode === "register") {
         const data = await register(trimmedEmail, trimmedPassword);
-
+      
         setToken(data.token);
-
+        console.log("new guest token", data.token);
+        console.log("saved token", localStorage.getItem("todoMoneyToken"));
+        console.log("saved userKey", localStorage.getItem("todoMoneyUserKey"));
+        localStorage.setItem("todoMoneyUserKey", trimmedEmail.toLowerCase());
+      
         nav(from, { replace: true });
         return;
       }
@@ -46,8 +57,13 @@ export default function LoginPage() {
       const data = await login(trimmedEmail, trimmedPassword);
 
       setToken(data.token);
-
+      console.log("new guest token", data.token);
+      console.log("saved token", localStorage.getItem("todoMoneyToken"));
+      console.log("saved userKey", localStorage.getItem("todoMoneyUserKey"));
+      localStorage.setItem("todoMoneyUserKey", trimmedEmail.toLowerCase());
+      
       nav(from, { replace: true });
+
     } catch (e: any) {
       if (mode === "register" && e?.status === 409) {
         setError("このEmailは既に登録済みです。ログインしてください。");
@@ -62,23 +78,30 @@ export default function LoginPage() {
     }
   }
 
+  function getOrCreateGuestDeviceId() {
+    const key = "todoMoneyGuestDeviceId";
+  
+    const existing = localStorage.getItem(key);
+    if (existing) return existing;
+  
+    const id =
+      crypto.randomUUID?.() ??
+      `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  
+    localStorage.setItem(key, id);
+  
+    return id;
+  }
+
   async function handleGuestLogin() {
-    if (busy) return;
+    const deviceId = getOrCreateGuestDeviceId();
 
-    setError(null);
-    setBusy(true);
-
-    try {
-      const data = await guestLogin();
-
-      setToken(data.token);
-
-      nav("/goals", { replace: true });
-    } catch (e: any) {
-      setError(e?.message ?? "ゲストログインに失敗しました。");
-    } finally {
-      setBusy(false);
-    }
+    const data = await guestLogin(deviceId);
+    
+    setToken(data.token);
+    localStorage.setItem("todoMoneyUserKey", `guest:${deviceId}`);
+    
+    nav("/goals", { replace: true });
   }
 
   return (

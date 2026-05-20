@@ -34,6 +34,7 @@ public class AuthController {
   public record RegisterRequest(@Email @NotBlank String email, @NotBlank String password) {}
   public record LoginRequest(@Email @NotBlank String email, @NotBlank String password) {}
   public record AuthResponse(String token) {}
+  public record GuestLoginRequest(String deviceId) {}
 
   @PostMapping("/register")
   public AuthResponse register(@RequestBody RegisterRequest req) {
@@ -62,15 +63,21 @@ public class AuthController {
   }
 
   @PostMapping("/guest")
-  public AuthResponse guestLogin() {
-    String guestEmail = "guest_" + UUID.randomUUID() + "@guest.local";
-    String guestPassword = UUID.randomUUID().toString();
+  public AuthResponse guestLogin(@RequestBody GuestLoginRequest req) {
+  String rawDeviceId = req.deviceId();
 
-    User u = new User();
-    u.setEmail(guestEmail);
-    u.setPasswordHash(encoder.encode(guestPassword));
-    u = userRepo.save(u);
+      final String deviceId =
+      (rawDeviceId == null || rawDeviceId.isBlank())
+          ? UUID.randomUUID().toString()
+          : rawDeviceId;
 
-    return new AuthResponse(jwt.issueToken(u.getId(), u.getEmail()));
+      User u = userRepo.findByDeviceId(deviceId)
+      .orElseGet(() -> {
+        User guest = new User();
+        guest.setDeviceId(deviceId);
+        return userRepo.save(guest);
+      });
+
+      return new AuthResponse(jwt.issueToken(u.getId(), u.getEmail()));
   }
 }

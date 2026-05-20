@@ -121,9 +121,10 @@ export async function login(email: string, password: string) {
   });
 }
 
-export async function guestLogin() {
+export async function guestLogin(deviceId: string) {
   return request<{ token: string }>("/api/auth/guest", {
     method: "POST",
+    body: JSON.stringify({ deviceId }),
   });
 }
 
