@@ -75,6 +75,8 @@ public class AuthController {
       .orElseGet(() -> {
         User guest = new User();
         guest.setDeviceId(deviceId);
+        guest.setEmail("guest_" + deviceId + "@guest.local");
+        guest.setPasswordHash("");
         return userRepo.save(guest);
       });
 
