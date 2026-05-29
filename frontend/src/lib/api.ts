@@ -27,9 +27,7 @@ export type ApiError = { status: number; message: string };
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
 
-  const url = path.startsWith("http")
-    ? path
-    : `${API_BASE_URL}${path}`;
+  const url = path.startsWith("http") ? path : `${API_BASE_URL}${path}`;
 
   console.log("API request:", url, init.method ?? "GET");
 
@@ -103,6 +101,32 @@ export type CalendarItem = {
   completed: boolean;
   tags: TagItem[];
 };
+
+export type InboxStatus = "INBOX" | "PROCESSED";
+
+export interface InboxItem {
+  id: number;
+  userId: number;
+  title: string;
+  memo?: string;
+  targetDate?: string;
+  status: InboxStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInboxRequest {
+  userId: number;
+  title: string;
+  memo?: string;
+  targetDate?: string;
+}
+
+export interface UpdateInboxRequest {
+  title?: string;
+  memo?: string;
+  targetDate?: string;
+}
 
 // =====================
 // Auth
@@ -219,6 +243,46 @@ export async function history(from: string, to: string): Promise<any[]> {
 
 export function deleteAccount() {
   return request<void>("/api/me", {
+    method: "DELETE",
+  });
+}
+
+// =====================
+// Inbox
+// =====================
+export async function getInboxItems(userId: number): Promise<InboxItem[]> {
+  return request<InboxItem[]>(
+    `/api/inbox?userId=${encodeURIComponent(String(userId))}`
+  );
+}
+
+export async function createInboxItem(
+  body: CreateInboxRequest
+): Promise<InboxItem> {
+  return request<InboxItem>("/api/inbox", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateInboxItem(
+  id: number,
+  body: UpdateInboxRequest
+): Promise<InboxItem> {
+  return request<InboxItem>(`/api/inbox/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function markInboxProcessed(id: number): Promise<InboxItem> {
+  return request<InboxItem>(`/api/inbox/${id}/processed`, {
+    method: "PUT",
+  });
+}
+
+export async function deleteInboxItem(id: number): Promise<void> {
+  return request<void>(`/api/inbox/${id}`, {
     method: "DELETE",
   });
 }
