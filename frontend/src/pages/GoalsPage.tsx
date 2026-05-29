@@ -53,24 +53,183 @@ type GoalScheduleProgress = {
 };
 
 type TabId = "todo" | "history";
-type LifeTagId = "side_business" | "health" | "study" | "output" | "sleep";
+type LifeTagId = string;
 
 type LifeTag = {
   id: LifeTagId;
   label: string;
   statusName: string;
   emoji: string;
+  custom?: boolean;
 };
 
-const LIFE_TAGS: LifeTag[] = [
+const DEFAULT_LIFE_TAGS: LifeTag[] = [
   { id: "side_business", label: "副業", statusName: "副業力", emoji: "💰" },
-  { id: "health", label: "健康", statusName: "健康", emoji: "💪" },
-  { id: "study", label: "学習", statusName: "学習", emoji: "📚" },
-  { id: "output", label: "発信", statusName: "発信", emoji: "📣" },
-  { id: "sleep", label: "睡眠", statusName: "睡眠", emoji: "🌙" },
+  { id: "health", label: "健康", statusName: "健康力", emoji: "💪" },
+  { id: "study", label: "学習", statusName: "学習力", emoji: "📚" },
+  { id: "output", label: "発信", statusName: "発信力", emoji: "📣" },
+  { id: "sleep", label: "睡眠", statusName: "睡眠力", emoji: "🌙" },
 ];
 
 type GoalTagMap = Record<number, LifeTagId>;
+
+type HiddenBalanceType = "skill" | "recovery" | "play" | "connection" | "life";
+
+type TodayMessage = {
+  icon: string;
+  title: string;
+  body: string;
+  tip: string;
+};
+
+const HIDDEN_TAG_TYPES: Record<string, HiddenBalanceType> = {
+  side_business: "skill",
+  study: "skill",
+  output: "skill",
+  health: "recovery",
+  sleep: "recovery",
+};
+
+function getHiddenType(tag: LifeTag): HiddenBalanceType {
+  if (HIDDEN_TAG_TYPES[tag.id]) return HIDDEN_TAG_TYPES[tag.id];
+
+  const text = `${tag.label}${tag.statusName}`.toLowerCase();
+
+  if (
+    text.includes("休") ||
+    text.includes("睡眠") ||
+    text.includes("健康") ||
+    text.includes("回復") ||
+    text.includes("散歩") ||
+    text.includes("筋トレ")
+  ) {
+    return "recovery";
+  }
+
+  if (
+    text.includes("遊") ||
+    text.includes("エモ") ||
+    text.includes("趣味") ||
+    text.includes("旅行") ||
+    text.includes("ゲーム")
+  ) {
+    return "play";
+  }
+
+  if (
+    text.includes("家族") ||
+    text.includes("友") ||
+    text.includes("人間") ||
+    text.includes("交流")
+  ) {
+    return "connection";
+  }
+
+  if (
+    text.includes("勉強") ||
+    text.includes("学習") ||
+    text.includes("副業") ||
+    text.includes("発信") ||
+    text.includes("仕事") ||
+    text.includes("開発")
+  ) {
+    return "skill";
+  }
+
+  return tag.custom ? "life" : "skill";
+}
+
+function buildTodayMessage(params: {
+  total: number;
+  done: number;
+  percent: number;
+  streakLikeDone: number;
+  skillDone: number;
+  recoveryDone: number;
+  playDone: number;
+}) : TodayMessage {
+  const { total, done, percent, streakLikeDone, skillDone, recoveryDone, playDone } = params;
+
+  if (total === 0) {
+    return {
+      icon: "🌱",
+      title: "今日は小さく始められます",
+      body: "まだ今日の流れは空いています。5分で終わる行動を1つ置くだけでも十分です 🌱",
+      tip: "TaskMoneyは、あなたの積み上げを記録しています ✨",
+    };
+  }
+
+  if (done === 0) {
+    return {
+      icon: "🌿",
+      title: "今日は小さくてもOKです",
+      body: "まだ完了はありません。1つだけ積めば、今日の流れはちゃんと動き始めます ☕️",
+      tip: "止まりそうな行動は、あとで一緒に軽くできます 🌿",
+    };
+  }
+
+  if (percent >= 100) {
+    return {
+      icon: "✨",
+      title: "今日の行動、かなり整っています",
+      body: "予定していた行動を完了できています。積み上げた行動、ちゃんと残っています ✨",
+      tip: "今日はここまででも十分。余力があれば回復系を入れるとさらに安定します 🌙",
+    };
+  }
+
+  if (skillDone >= 2 && recoveryDone === 0) {
+    return {
+      icon: "🛌",
+      title: "かなり前に進めています",
+      body: "スキル向上系の行動が進んでいます。少し張り詰め気味にならないよう、回復も1つ入れると良さそうです 🌿",
+      tip: "休むことも、長く続けるための前進です ☕️",
+    };
+  }
+
+  if (recoveryDone > 0 && skillDone > 0) {
+    return {
+      icon: "⚖️",
+      title: "今日のバランス、良い感じです",
+      body: "前に進む行動と整える行動の両方が入っています。無理なく続けやすい流れです 🌱",
+      tip: "昨日の努力、少しずつ形になっています ✨",
+    };
+  }
+
+  if (recoveryDone > 0 && skillDone === 0) {
+    return {
+      icon: "🌿",
+      title: "回復できています",
+      body: "今日は整える行動が入っています。余力が戻ってきたら、小さな前進行動を1つ足しても良さそうです 🍃",
+      tip: "回復している。その調子です 🌙",
+    };
+  }
+
+  if (playDone > 0 && done === playDone) {
+    return {
+      icon: "🎮",
+      title: "気分転換も大事です",
+      body: "今日は遊び・エモ系の行動が進んでいます。余力があれば、5分だけ前進行動を足すとさらに良い流れになります ☕️",
+      tip: "楽しむことも、人生ステータスの一部です ✨",
+    };
+  }
+
+  if (streakLikeDone >= 7) {
+    return {
+      icon: "🔥",
+      title: "流れが続いています",
+      body: "継続の土台ができ始めています。今日も1つ積めば、流れはさらに強くなります 🌱",
+      tip: "あなたの努力は、TaskMoneyがちゃんと覚えています ✨",
+    };
+  }
+
+  return {
+    icon: "💡",
+    title: "今日の流れができています",
+    body: "すでに行動が積み上がっています。完璧より、流れを切らないことが大事です 🌿",
+    tip: "積み上げた行動、ちゃんと残っています ✨",
+  };
+}
+
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "https://todo-money-api.onrender.com";
@@ -80,15 +239,17 @@ function getToken() {
 }
 
 function getCurrentUserKey() {
+  const savedUserKey = localStorage.getItem("todoMoneyUserKey");
+  if (savedUserKey) return savedUserKey;
+
   const token = localStorage.getItem("todoMoneyToken");
   if (!token) return "guest";
 
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
-
-    return (
-      payload.sub ??
+    return String(
       payload.email ??
+      payload.sub ??
       payload.userId ??
       payload.id ??
       "user"
@@ -240,25 +401,64 @@ function calcGoalScheduleProgresses(
 async function deleteGoalApi(goalId: number) {
   const token = getToken();
 
-  const res = await fetch(`${API_BASE}/api/goals/${goalId}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  });
+  try {
+    const res = await fetch(`${API_BASE}/api/goals/${goalId}`, {
+      method: "DELETE",
+      headers: {
+        Authorization: token ? `Bearer ${token}` : "",
+      },
+    });
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `Goal削除に失敗しました: ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        clearToken();
+        throw new Error("ログインの有効期限が切れました。再度ログインしてください。");
+      }
+
+      if (res.status >= 500) {
+        throw new Error("通信に失敗しました。時間をおいて再度お試しください。");
+      }
+
+      if (res.status === 404) {
+        throw new Error("削除対象のデータが見つかりませんでした。");
+      }
+
+      throw new Error("削除に失敗しました。");
+    }
+  } catch (e: any) {
+    throw new Error(e?.message ?? "通信に失敗しました。時間をおいて再度お試しください。");
   }
 }
 
-function getTag(tagId?: LifeTagId) {
-  return LIFE_TAGS.find((t) => t.id === tagId) ?? LIFE_TAGS[0];
+function customTagKey() {
+  return `todo-money:customLifeTags:v1:${getCurrentUserKey()}`;
+}
+
+function loadCustomTags(): LifeTag[] {
+  try {
+    const raw = localStorage.getItem(customTagKey());
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCustomTags(tags: LifeTag[]) {
+  localStorage.setItem(customTagKey(), JSON.stringify(tags));
+}
+
+function getTag(tags: LifeTag[], tagId?: LifeTagId) {
+  return tags.find((t) => t.id === tagId) ?? tags[0] ?? DEFAULT_LIFE_TAGS[0];
+}
+
+function toStatusName(label: string) {
+  const base = label.trim().replace(/力$/, "");
+  return `${base}力`;
 }
 
 export default function GoalsPage() {
   const nav = useNavigate();
+  const isGuest = localStorage.getItem("todoMoneyUserKey") === "guest";
 
   const [showSplash, setShowSplash] = useState(true);
   const [goals, setGoals] = useState<GoalListItem[]>([]);
@@ -268,6 +468,18 @@ export default function GoalsPage() {
   const [newTitle, setNewTitle] = useState("副業で月5万");
   const [newIncome, setNewIncome] = useState(600000);
   const [newGoalTag, setNewGoalTag] = useState<LifeTagId>("side_business");
+  const [customLifeTags, setCustomLifeTags] = useState<LifeTag[]>(() =>
+    loadCustomTags()
+  );
+
+  const allLifeTags = useMemo(
+    () => [...DEFAULT_LIFE_TAGS, ...customLifeTags],
+    [customLifeTags]
+  );
+
+  const [showTagModal, setShowTagModal] = useState(false);
+  const [newTagEmoji, setNewTagEmoji] = useState("✨");
+  const [newTagLabel, setNewTagLabel] = useState("エモ");
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [goalTags, setGoalTags] = useState<GoalTagMap>(() => loadGoalTags());
@@ -277,6 +489,8 @@ export default function GoalsPage() {
   const [moneyGain, setMoneyGain] = useState("");
   const [showMoneyGain, setShowMoneyGain] = useState(false);
   const prevTotalEarnedRef = useRef<number>(0);
+  const [showAllGoals, setShowAllGoals] = useState(false);
+  const visibleGoals = showAllGoals ? goals : goals.slice(0, 3);
 
   const [openGoals, setOpenGoals] = useState<Record<number, boolean>>({});
   const [history, setHistory] = useState<ScheduleHistoryItem[]>(() =>
@@ -286,10 +500,37 @@ export default function GoalsPage() {
     loadSchedules()
   );
 
+  function onCreateCustomTag() {
+    const label = newTagLabel.trim();
+
+    if (!label) {
+      alert("タグ名を入力してください");
+      return;
+    }
+
+    const emoji = newTagEmoji.trim() || "✨";
+
+    const tag: LifeTag = {
+      id: `custom_${Date.now()}`,
+      label,
+      statusName: toStatusName(label),
+      emoji,
+      custom: true,
+    };
+
+    const next = [...customLifeTags, tag];
+    setCustomLifeTags(next);
+    saveCustomTags(next);
+
+    setNewGoalTag(tag.id);
+    setShowTagModal(false);
+  }
+
   function refreshToday() {
     setSchedules(loadSchedules());
     setHistory(loadHistory());
     setGoalTags(loadGoalTags());
+    setCustomLifeTags(loadCustomTags());
   }
 
   useEffect(() => {
@@ -319,13 +560,14 @@ export default function GoalsPage() {
   }
 
   useEffect(() => {
-    (async () => {
+    (async () => 
+    {
       try {
         setError(null);
         await refreshGoals();
         refreshToday();
       } catch (e: any) {
-        setError(e?.message ?? "読み込みに失敗しました");
+        setError(friendlyErrorMessage(e, "読み込みに失敗しました"));
       }
     })();
   }, []);
@@ -375,7 +617,7 @@ export default function GoalsPage() {
       : Math.round((allProgressDone / allProgressTotal) * 100);
 
   const statusItems = useMemo(() => {
-    return LIFE_TAGS.map((tag) => {
+    return allLifeTags.map((tag) => {
       const goalIds = goals
         .filter((g: any) => (goalTags[g.id] ?? "side_business") === tag.id)
         .map((g: any) => g.id);
@@ -403,7 +645,58 @@ export default function GoalsPage() {
           (g: any) => (goalTags[g.id] ?? "side_business") === x.tag.id
         )
     );
-  }, [goals, goalTags, allProgressItems]);
+  }, [goals, goalTags, allProgressItems, allLifeTags]);
+
+
+  const todayMessage = useMemo(() => {
+    const today = new Date();
+    const todayYmd =
+      today.getFullYear() +
+      "-" +
+      String(today.getMonth() + 1).padStart(2, "0") +
+      "-" +
+      String(today.getDate()).padStart(2, "0");
+
+    let todayTotal = 0;
+    let todayDone = 0;
+    let skillDone = 0;
+    let recoveryDone = 0;
+    let playDone = 0;
+
+    for (const s of schedules) {
+      if (!occursOnDate(s, todayYmd)) continue;
+
+      todayTotal++;
+
+      const done = s.completedDates?.includes(todayYmd) ?? false;
+      if (!done) continue;
+
+      todayDone++;
+
+      const goalId = s.taskRef?.goalId;
+      const tagId =
+        goalId != null ? goalTags[goalId] ?? "side_business" : s.tags?.[0] ?? "side_business";
+      const tag = getTag(allLifeTags, tagId);
+      const hiddenType = getHiddenType(tag);
+
+      if (hiddenType === "skill") skillDone++;
+      if (hiddenType === "recovery") recoveryDone++;
+      if (hiddenType === "play") playDone++;
+    }
+
+    const percent = todayTotal === 0 ? 0 : Math.round((todayDone / todayTotal) * 100);
+    const streakLikeDone = statusItems.reduce((sum, x) => sum + x.done, 0);
+
+    return buildTodayMessage({
+      total: todayTotal,
+      done: todayDone,
+      percent,
+      streakLikeDone,
+      skillDone,
+      recoveryDone,
+      playDone,
+    });
+  }, [schedules, goalTags, allLifeTags, statusItems]);
 
   async function onCreateGoal() {
     setError(null);
@@ -561,6 +854,19 @@ export default function GoalsPage() {
     }
   }
 
+  function friendlyErrorMessage(e: any, fallback: string) {
+    const message = String(e?.message ?? "");
+  
+    if (
+      message.includes("Internal Server Error") ||
+      message.includes("500") ||
+      message.includes("Network Error")
+    ) {
+      return "データの取得に失敗しました。少し時間をおいて、もう一度開いてみてください 🌿";
+    }
+    return message || fallback;
+  }
+
   async function handleToggleTasks(goalId: number) {
     setError(null);
     const isOpen = openGoals[goalId];
@@ -604,6 +910,30 @@ export default function GoalsPage() {
           }
         `}
       </style>
+
+      <header style={ui.pageHeader}>
+        <div>
+          <div style={ui.pageKicker}>TaskMoney</div>
+          <h1 style={ui.pageTitle}>目標</h1>
+        </div>
+        <div style={ui.headerActions}>
+          <button type="button" onClick={refreshToday} style={ui.iconButton}>🌿</button>
+          <button type="button" onClick={logout} style={ui.iconButton}>⚙️</button>
+        </div>
+      </header>
+
+      <div className="card" style={ui.todayMessageCard}>
+        <div style={ui.todayMessageTop}>
+          <div style={ui.todayMessageIcon}>{todayMessage.icon}</div>
+          <div>
+            <div style={ui.todayMessageLabel}>TODAY MESSAGE</div>
+            <h2 style={ui.todayMessageTitle}>{todayMessage.title}</h2>
+          </div>
+        </div>
+
+        <p style={ui.todayMessageBody}>{todayMessage.body}</p>
+        <div style={ui.todayMessageTip}>{todayMessage.tip}</div>
+      </div>
 
       <div className="card" style={{ ...ui.progressCard, marginBottom: 14 }}>
         <div style={ui.topButtons}>
@@ -665,9 +995,9 @@ export default function GoalsPage() {
                       style={{
                         height: 16,
                         borderRadius: 4,
-                        background: done ? "#22C55E" : "rgba(0,0,0,0.08)",
+                        background: done ? "#72D957" : "rgba(255,255,255,0.06)",
                         boxShadow: done
-                          ? "0 0 6px rgba(34,197,94,0.28)"
+                          ? "0 0 12px rgba(114,217,87,0.42)"
                           : "none",
                       }}
                     />
@@ -706,7 +1036,7 @@ export default function GoalsPage() {
                         height: "100%",
                         width: `${s.percent}%`,
                         borderRadius: 999,
-                        background: "#22C55E",
+                        background: "#72D957",
                       }}
                     />
                   </div>
@@ -731,8 +1061,8 @@ export default function GoalsPage() {
               }}
               style={{
                 ...ui.segmentButton,
-                background: activeTab === tab.id ? "black" : "rgba(0,0,0,0.04)",
-                color: activeTab === tab.id ? "white" : "#555",
+                background: activeTab === tab.id ? "rgba(88, 166, 65, 0.20)" : "rgba(255,255,255,0.05)",
+                color: activeTab === tab.id ? "#8EE66F" : "rgba(255,255,255,0.52)",
               }}
             >
               {tab.label}
@@ -764,8 +1094,8 @@ export default function GoalsPage() {
                 </div>
               </div>
 
-              {goals.map((g: any) => {
-                const tag = getTag(goalTags[g.id]);
+              {visibleGoals.map((g: any) => {
+                const tag = getTag(allLifeTags, goalTags[g.id]);
 
                 return (
                   <div className="card" key={g.id} style={{ ...ui.card, marginBottom: 14 }}>
@@ -781,7 +1111,7 @@ export default function GoalsPage() {
                             }
                             style={ui.goalSelect}
                           >
-                            {LIFE_TAGS.map((tag) => (
+                            {allLifeTags.map((tag) => (
                               <option key={tag.id} value={tag.id}>
                                 {tag.emoji} {tag.label}
                               </option>
@@ -797,10 +1127,10 @@ export default function GoalsPage() {
 
                     <div style={ui.goalActions}>
                       <button onClick={() => onAddTask(g.id)} style={ui.actionBtn}>
-                        + Task
+                      タスク追加
                       </button>
                       <button onClick={() => handleToggleTasks(g.id)} style={ui.actionBtn}>
-                        {openGoals[g.id] ? "Hide Tasks" : "Show Tasks"}
+                        {openGoals[g.id] ? "閉じる" : "詳細"}
                       </button>
                       <button
                         onClick={() => onDeleteGoal(g.id, g.title)}
@@ -847,6 +1177,28 @@ export default function GoalsPage() {
                   </div>
                 );
               })}
+              {goals.length > 3 && (
+            <div style={{ textAlign: "center", marginTop: 12, marginBottom: 20 }}>
+       <button
+        onClick={() => setShowAllGoals((v) => !v)}
+        style={{
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.06)",
+          color: "rgba(255,255,255,0.86)",
+          fontWeight: 900,
+          fontSize: 15,
+          borderRadius: 18,
+          padding: "14px 18px",
+          minWidth: 220,
+          boxShadow: "0 14px 32px rgba(0,0,0,0.18)",
+        }}
+      >
+      {showAllGoals
+        ? "閉じる"
+        : `すべての目標を見る（${goals.length}件）`}
+    </button>
+  </div>
+)}
             </>
           )}
         </>
@@ -907,12 +1259,20 @@ export default function GoalsPage() {
                 onChange={(e) => setNewGoalTag(e.target.value as LifeTagId)}
                 style={ui.inputLike}
               >
-                {LIFE_TAGS.map((tag) => (
+                {allLifeTags.map((tag) => (
                   <option key={tag.id} value={tag.id}>
                     {tag.emoji} {tag.label}
                   </option>
                 ))}
               </select>
+
+              <button
+                type="button"
+                style={ui.tagCreateButton}
+                onClick={() => setShowTagModal(true)}
+              >
+                ＋ 新しい人生ステータスを作る
+              </button>
 
               <label>Annual Income（JPY換算でもOK）</label>
               <input
@@ -928,118 +1288,219 @@ export default function GoalsPage() {
           </div>
         </div>
       )}
+
+      {showTagModal && (
+        <div style={ui.modalBackdrop} onClick={() => setShowTagModal(false)}>
+          <div style={ui.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={ui.modalHeader}>
+              <h2 style={ui.modalTitle}>新しいタグ</h2>
+              <button style={ui.closeButton} onClick={() => setShowTagModal(false)}>
+                ×
+              </button>
+            </div>
+
+            <div style={ui.modalBody}>
+              <label>絵文字</label>
+              <input
+                value={newTagEmoji}
+                onChange={(e) => setNewTagEmoji(e.target.value)}
+                placeholder="例：✨"
+                style={ui.inputLike}
+              />
+
+              <label>タグ名</label>
+              <input
+                value={newTagLabel}
+                onChange={(e) => setNewTagLabel(e.target.value)}
+                placeholder="例：エモ"
+                style={ui.inputLike}
+              />
+
+              <div style={ui.previewTag}>
+                {newTagEmoji.trim() || "✨"} {toStatusName(newTagLabel || "エモ")} Lv1
+              </div>
+
+              <button style={ui.createButton} onClick={onCreateCustomTag}>
+                タグを作成
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 const ui: Record<string, React.CSSProperties> = {
+  container: {
+    width: "100%",
+    maxWidth: "100%",
+    minHeight: "100dvh",
+    overflowX: "hidden",
+    padding: "18px 16px 120px",
+    background:
+      "radial-gradient(circle at 20% 0%, rgba(90, 180, 80, 0.16), transparent 28%), linear-gradient(180deg, #090B09 0%, #111311 52%, #090A09 100%)",
+    color: "#F4F7F2",
+  },
+
+  pageHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    margin: "4px 0 18px",
+  },
+  pageKicker: {
+    color: "rgba(142,230,111,0.78)",
+    fontSize: 12,
+    fontWeight: 900,
+    letterSpacing: "0.14em",
+  },
+  pageTitle: {
+    margin: 0,
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: 950,
+    letterSpacing: "-0.05em",
+  },
+  headerActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  iconButton: {
+    width: 42,
+    height: 42,
+    minWidth: 42,
+    minHeight: 42,
+    padding: 0,
+    borderRadius: 16,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.06)",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,
+    boxShadow: "0 12px 28px rgba(0,0,0,0.22)",
+  },
+
+  todayMessageCard: {
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 14,
+    background:
+      "linear-gradient(135deg, rgba(255,255,255,0.09), rgba(255,255,255,0.045))",
+    border: "1px solid rgba(255,255,255,0.08)",
+    boxShadow: "0 18px 40px rgba(0,0,0,0.26)",
+    backdropFilter: "blur(18px)",
+  },
+  todayMessageTop: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 10,
+  },
+  todayMessageIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    background:
+      "radial-gradient(circle at 30% 20%, rgba(142,230,111,0.36), rgba(32,68,29,0.70))",
+    color: "#fff",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 23,
+    flex: "0 0 auto",
+    boxShadow: "0 0 24px rgba(114,217,87,0.18)",
+  },
+  todayMessageLabel: {
+    color: "rgba(255,255,255,0.46)",
+    letterSpacing: "0.14em",
+    fontSize: 10,
+    fontWeight: 900,
+    marginBottom: 4,
+  },
+  todayMessageTitle: {
+    margin: 0,
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: 950,
+    letterSpacing: "-0.045em",
+    lineHeight: 1.18,
+  },
+  todayMessageBody: {
+    margin: 0,
+    color: "rgba(255,255,255,0.70)",
+    fontSize: 13,
+    fontWeight: 700,
+    lineHeight: 1.75,
+  },
+  todayMessageTip: {
+    marginTop: 14,
+    padding: "12px 14px",
+    borderRadius: 17,
+    background: "rgba(0,0,0,0.38)",
+    color: "rgba(255,255,255,0.92)",
+    border: "1px solid rgba(255,255,255,0.06)",
+    fontSize: 13,
+    fontWeight: 900,
+    lineHeight: 1.6,
+  },
 
   progressCard: {
     borderRadius: 28,
     overflow: "hidden",
-    background: "#111",
+    padding: 20,
+    background:
+      "linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.035))",
     color: "#fff",
-    border: "none",
-    boxShadow: "0 20px 44px rgba(0,0,0,0.18)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    boxShadow: "0 22px 54px rgba(0,0,0,0.30)",
+    backdropFilter: "blur(18px)",
   },
-  
   progressMainTitle: {
     margin: "0 0 4px",
     color: "#fff",
-    fontSize: 42,
-    fontWeight: 900,
-    letterSpacing: "-0.05em",
+    fontSize: 38,
+    fontWeight: 950,
+    letterSpacing: "-0.055em",
   },
-  
   progressPercent: {
-    fontSize: 48,
-    fontWeight: 900,
+    fontSize: 50,
+    fontWeight: 950,
     color: "#fff",
-    letterSpacing: "-0.05em",
+    letterSpacing: "-0.06em",
+    textShadow: "0 0 28px rgba(255,255,255,0.12)",
   },
-  
   progressMuted: {
-    color: "rgba(255,255,255,0.62)",
+    color: "rgba(255,255,255,0.50)",
     fontSize: 13,
-    fontWeight: 700,
+    fontWeight: 750,
     lineHeight: 1.7,
   },
-  
+  progressItemTitle: {
+    fontWeight: 900,
+    color: "rgba(255,255,255,0.92)",
+    whiteSpace: "nowrap",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+  },
   statusTitle: {
     color: "#fff",
-    fontWeight: 900,
-    marginBottom: 8,
-    fontSize: 22,
+    fontWeight: 950,
+    marginBottom: 12,
+    fontSize: 24,
+    letterSpacing: "-0.04em",
   },
-  taskRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    width: "100%",
-    padding: "14px 0",
-    borderBottom: "1px solid #eef0f5",
-  },
-  
-  taskMain: {
-    flex: "1 1 auto",
-    minWidth: 0,
-  },
-  
-  taskTitle: {
-    fontSize: 18,
-    fontWeight: 900,
-    lineHeight: 1.35,
-    whiteSpace: "normal",
-    wordBreak: "break-word",
-  },
-  
-  taskBadge: {
-    display: "inline-flex",
-    marginTop: 8,
-    padding: "4px 10px",
+  statusBar: {
+    height: 10,
     borderRadius: 999,
-    border: "1px solid #e1e5ef",
-    color: "#666",
-    fontSize: 13,
-    fontWeight: 700,
-  },
-  
-  taskActions: {
-    flex: "0 0 auto",
-    display: "flex",
-    gap: 10,
-    alignItems: "center",
-  },
-  
-  taskEditBtn: {
-    minWidth: 70,
-    borderRadius: 14,
-    padding: "12px 14px",
-    background: "#fff",
-    color: "#111",
-  },
-  
-  taskCompleteBtn: {
-    minWidth: 112,
-    borderRadius: 14,
-    padding: "12px 14px",
-    border: "none",
-    background: "#111",
-    color: "#fff",
-    fontWeight: 900,
-  },
-  container: {
-    width: "100%",
-    maxWidth: "100%",
-    overflowX: "hidden",
-    paddingBottom: 120,
-    
-  },
-  card: {
-    borderRadius: 24,
+    background: "rgba(255,255,255,0.08)",
     overflow: "hidden",
   },
+
   topButtons: {
     display: "flex",
     justifyContent: "flex-end",
@@ -1047,32 +1508,30 @@ const ui: Record<string, React.CSSProperties> = {
     marginBottom: 10,
   },
   deleteMini: {
-    color: "#b91c1c",
-    borderColor: "#fecaca",
+    color: "#ff8b8b",
+    border: "1px solid rgba(255,139,139,0.24)",
+    background: "rgba(255,139,139,0.08)",
     fontSize: 12,
     padding: "8px 10px",
+    borderRadius: 999,
   },
   logoutMini: {
+    color: "rgba(255,255,255,0.72)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.05)",
     fontSize: 12,
     padding: "8px 10px",
-  },
-  progressItemTitle: {
-    fontWeight: 800,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  statusBar: {
-    height: 10,
     borderRadius: 999,
-    background: "rgba(0,0,0,0.08)",
-    overflow: "hidden",
   },
+
   segmentCard: {
     marginBottom: 14,
     padding: "6px 8px",
     borderRadius: 22,
     overflow: "hidden",
+    background: "rgba(255,255,255,0.055)",
+    border: "1px solid rgba(255,255,255,0.07)",
+    boxShadow: "0 14px 34px rgba(0,0,0,0.18)",
   },
   segmentButton: {
     flex: 1,
@@ -1080,9 +1539,138 @@ const ui: Record<string, React.CSSProperties> = {
     borderRadius: 999,
     border: "none",
     fontSize: 15,
-    fontWeight: 900,
+    fontWeight: 950,
     cursor: "pointer",
   },
+
+  sectionHeader: {
+    margin: "20px 2px 12px",
+  },
+  sectionLabel: {
+    color: "rgba(255,255,255,0.45)",
+    fontWeight: 900,
+    fontSize: 13,
+  },
+  sectionTitle: {
+    color: "#fff",
+    fontSize: 30,
+    fontWeight: 950,
+    margin: "4px 0 0",
+    letterSpacing: "-0.05em",
+  },
+
+  card: {
+    borderRadius: 24,
+    overflow: "hidden",
+    padding: 18,
+    background:
+      "linear-gradient(145deg, rgba(255,255,255,0.075), rgba(255,255,255,0.035))",
+    color: "#fff",
+    border: "1px solid rgba(255,255,255,0.075)",
+    boxShadow: "0 18px 42px rgba(0,0,0,0.24)",
+  },
+  goalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: 12,
+    alignItems: "flex-start",
+  },
+  goalTitle: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: 950,
+    letterSpacing: "-0.045em",
+    lineHeight: 1.18,
+  },
+  goalSelect: {
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.22)",
+    color: "#fff",
+    fontWeight: 850,
+    maxWidth: "100%",
+  },
+  goalActions: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 8,
+    marginTop: 16,
+  },
+  actionBtn: {
+    borderRadius: 14,
+    padding: "11px 10px",
+    color: "rgba(255,255,255,0.86)",
+    background: "rgba(255,255,255,0.045)",
+    border: "1px solid rgba(255,255,255,0.09)",
+    fontWeight: 900,
+  },
+  dangerBtn: {
+    borderRadius: 14,
+    padding: "11px 10px",
+    color: "#ff8b8b",
+    border: "1px solid rgba(255,139,139,0.22)",
+    background: "rgba(255,139,139,0.08)",
+    fontWeight: 900,
+  },
+
+  taskRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    width: "100%",
+    padding: "14px 0",
+    borderBottom: "1px solid rgba(255,255,255,0.07)",
+  },
+  taskMain: {
+    flex: "1 1 auto",
+    minWidth: 0,
+  },
+  taskTitle: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: 950,
+    lineHeight: 1.35,
+    whiteSpace: "normal",
+    wordBreak: "break-word",
+  },
+  taskBadge: {
+    display: "inline-flex",
+    marginTop: 8,
+    padding: "4px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "rgba(255,255,255,0.56)",
+    fontSize: 12,
+    fontWeight: 800,
+  },
+  taskActions: {
+    flex: "0 0 auto",
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+  },
+  taskEditBtn: {
+    minWidth: 60,
+    borderRadius: 14,
+    padding: "11px 12px",
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    color: "#fff",
+    fontWeight: 900,
+  },
+  taskCompleteBtn: {
+    minWidth: 102,
+    borderRadius: 14,
+    padding: "11px 12px",
+    border: "none",
+    background: "#72D957",
+    color: "#071006",
+    fontWeight: 950,
+    boxShadow: "0 0 22px rgba(114,217,87,0.24)",
+  },
+
   emptyArea: {
     minHeight: 360,
     display: "flex",
@@ -1096,7 +1684,8 @@ const ui: Record<string, React.CSSProperties> = {
     width: 88,
     height: 88,
     borderRadius: 24,
-    background: "#f5f5f5",
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1105,67 +1694,18 @@ const ui: Record<string, React.CSSProperties> = {
   },
   emptyTitle: {
     fontSize: 28,
-    fontWeight: 900,
+    fontWeight: 950,
     margin: "0 0 16px",
-    color: "#111",
+    color: "#fff",
   },
   emptyText: {
-    fontSize: 17,
+    fontSize: 16,
     lineHeight: 1.8,
-    color: "#9b9b9b",
+    color: "rgba(255,255,255,0.52)",
     margin: 0,
-    fontWeight: 600,
+    fontWeight: 750,
   },
-  sectionHeader: {
-    margin: "18px 0 12px",
-  },
-  sectionLabel: {
-    color: "#999",
-    fontWeight: 800,
-    fontSize: 14,
-  },
-  sectionTitle: {
-    fontSize: 28,
-    fontWeight: 900,
-    margin: "4px 0 0",
-  },
-  goalHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    gap: 12,
-    alignItems: "flex-start",
-  },
-  goalTitle: {
-    fontSize: 28,
-    fontWeight: 900,
-    letterSpacing: "-0.04em",
-  },
-  goalSelect: {
-    padding: "6px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(0,0,0,0.12)",
-    fontWeight: 700,
-    maxWidth: "100%",
-  },
-  goalActions: {
-    display: "flex",
-    gap: 10,
-    flexWrap: "wrap",
-    marginTop: 18,
-  },
-  actionBtn: {
-    borderRadius: 14,
-    padding: "12px 14px",
-    color: "#007aff",
-    background: "#fff",
-  },
-  dangerBtn: {
-    borderRadius: 14,
-    padding: "12px 14px",
-    color: "#b91c1c",
-    borderColor: "#fecaca",
-    background: "#fff",
-  },
+
   historyList: {
     marginTop: 8,
     paddingLeft: 16,
@@ -1184,8 +1724,8 @@ const ui: Record<string, React.CSSProperties> = {
     maxHeight: 64,
     padding: 0,
     borderRadius: "50%",
-    border: "none",
-    background: "#222",
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.10)",
     color: "#fff",
     fontSize: 34,
     lineHeight: 1,
@@ -1193,13 +1733,15 @@ const ui: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    boxShadow: "0 16px 28px rgba(0,0,0,0.18)",
+    boxShadow: "0 18px 38px rgba(0,0,0,0.38)",
     zIndex: 20,
+    backdropFilter: "blur(18px)",
   },
+
   modalBackdrop: {
     position: "fixed",
     inset: 0,
-    background: "rgba(0,0,0,0.32)",
+    background: "rgba(0,0,0,0.58)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1211,9 +1753,11 @@ const ui: Record<string, React.CSSProperties> = {
     width: "min(520px, calc(100vw - 32px))",
     maxWidth: "calc(100vw - 32px)",
     maxHeight: "calc(100dvh - 160px)",
-    background: "#fff",
+    background: "#151715",
+    color: "#fff",
+    border: "1px solid rgba(255,255,255,0.08)",
     borderRadius: 32,
-    boxShadow: "0 24px 70px rgba(0,0,0,0.24)",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.46)",
     display: "flex",
     flexDirection: "column",
     overflow: "hidden",
@@ -1232,8 +1776,9 @@ const ui: Record<string, React.CSSProperties> = {
   },
   modalTitle: {
     fontSize: 28,
-    fontWeight: 900,
+    fontWeight: 950,
     margin: 0,
+    color: "#fff",
   },
   closeButton: {
     width: 56,
@@ -1245,8 +1790,8 @@ const ui: Record<string, React.CSSProperties> = {
     padding: 0,
     borderRadius: "50%",
     border: "none",
-    background: "#f2f2f2",
-    color: "#111",
+    background: "rgba(255,255,255,0.08)",
+    color: "#fff",
     fontSize: 34,
     lineHeight: 1,
     fontWeight: 900,
@@ -1258,7 +1803,9 @@ const ui: Record<string, React.CSSProperties> = {
     width: "100%",
     padding: "12px 14px",
     borderRadius: 14,
-    border: "1px solid #d7dbe7",
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.22)",
+    color: "#fff",
   },
   createButton: {
     width: "100%",
@@ -1267,11 +1814,33 @@ const ui: Record<string, React.CSSProperties> = {
     marginBottom: 0,
     border: "none",
     borderRadius: 18,
-    background: "#111",
-    color: "#fff",
+    background: "#72D957",
+    color: "#071006",
     padding: "16px 18px",
     fontSize: 17,
+    fontWeight: 950,
+    boxShadow: "0 0 26px rgba(114,217,87,0.24)",
+  },
+  tagCreateButton: {
+    width: "100%",
+    marginTop: 10,
+    marginBottom: 14,
+    borderRadius: 14,
+    padding: "12px 14px",
+    border: "1px dashed rgba(255,255,255,0.18)",
+    background: "rgba(255,255,255,0.04)",
+    color: "#fff",
     fontWeight: 900,
+  },
+  previewTag: {
+    marginTop: 16,
+    padding: "14px 16px",
+    borderRadius: 18,
+    background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.08)",
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: 950,
   },
   moneyGain: {
     position: "fixed",
@@ -1284,7 +1853,7 @@ const ui: Record<string, React.CSSProperties> = {
     padding: "16px 28px",
     borderRadius: 18,
     fontSize: 34,
-    fontWeight: 900,
+    fontWeight: 950,
     boxShadow: "0 10px 40px rgba(0,0,0,0.35)",
     animation: "gainPop 1.8s ease forwards",
     pointerEvents: "none",
