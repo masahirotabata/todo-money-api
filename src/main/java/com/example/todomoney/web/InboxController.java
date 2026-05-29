@@ -1,8 +1,8 @@
-package com.example.todo_money.controller;
+package com.example.todomoney.web;
 
-import com.example.todo_money.entity.InboxEntity;
-import com.example.todo_money.entity.InboxEntity.InboxStatus;
-import com.example.todo_money.repository.InboxRepository;
+import com.example.todomoney.entity.InboxEntity;
+import com.example.todomoney.entity.InboxEntity.InboxStatus;
+import com.example.todomoney.repository.InboxRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
