@@ -1,4 +1,4 @@
-package com.example.todo_money.entity;
+package com.example.todomoney.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;

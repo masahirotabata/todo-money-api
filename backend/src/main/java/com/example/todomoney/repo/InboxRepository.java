@@ -1,7 +1,7 @@
-package com.example.todo_money.repository;
+package com.example.todomoney.repo;
 
-import com.example.todo_money.entity.InboxEntity;
-import com.example.todo_money.entity.InboxEntity.InboxStatus;
+import com.example.todomoney.entity.InboxEntity;
+import com.example.todomoney.entity.InboxEntity.InboxStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
