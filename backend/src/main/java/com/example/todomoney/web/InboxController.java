@@ -2,7 +2,7 @@ package com.example.todomoney.web;
 
 import com.example.todomoney.entity.InboxEntity;
 import com.example.todomoney.entity.InboxEntity.InboxStatus;
-import com.example.todomoney.repository.InboxRepository;
+import com.example.todomoney.repo.InboxRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
