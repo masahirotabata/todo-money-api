@@ -5,12 +5,14 @@ import {
   clearToken,
   listGoals,
   type GoalListItem,
+} from "../lib/api";
+import {
   createInboxItem,
   deleteInboxItem,
   getInboxItems,
   markInboxProcessed,
   type InboxItem,
-} from "../lib/api";
+} from "../lib/inboxStore";
 
 const DEFAULT_USER_ID = 1;
 
@@ -569,7 +571,7 @@ export default function HomePage() {
     }
   }
 
-  async function handleProcessed(id: number) {
+  async function handleProcessed(id: string) {
     setError(null);
 
     try {
@@ -580,7 +582,7 @@ export default function HomePage() {
     }
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: string) {
     const ok = window.confirm("このメモを削除しますか？");
     if (!ok) return;
 
