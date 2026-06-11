@@ -1,6 +1,7 @@
 // src/pages/DrivePage.tsx
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { listGoals } from "../lib/api";
+import { DAILY_REWARD_YEN, WEEKLY_TARGET_YEN } from "../lib/reward";
 
 type DriveKey = "stable" | "tired" | "stuck" | "recovery" | "goal";
 type SceneryStageKey = "normal" | "green" | "bright" | "city";
@@ -27,9 +28,6 @@ type GoalScheduleProgress = {
   done: number;
   percent: number;
 };
-
-const DAILY_REWARD_YEN = 164;
-const WEEKLY_TARGET_YEN = 50000;
 
 type DriveState = {
   key: DriveKey;

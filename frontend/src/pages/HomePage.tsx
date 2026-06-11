@@ -1,11 +1,7 @@
 // src/pages/HomePage.tsx
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  clearToken,
-  listGoals,
-  type GoalListItem,
-} from "../lib/api";
+import { clearToken } from "../lib/api";
 import {
   createInboxItem,
   deleteInboxItem,
@@ -13,6 +9,7 @@ import {
   markInboxProcessed,
   type InboxItem,
 } from "../lib/inboxStore";
+import { DAILY_REWARD_YEN } from "../lib/reward";
 
 const DEFAULT_USER_ID = 1;
 
@@ -63,6 +60,10 @@ function scheduleKey() {
   return `todo-money:schedules:v1:${getCurrentUserKey()}`;
 }
 
+function scheduleHistoryKey() {
+  return `todo-money:scheduleHistory:v1:${getCurrentUserKey()}`;
+}
+
 function loadSchedules(): CalendarScheduleEvent[] {
   try {
     const raw = localStorage.getItem(scheduleKey());
@@ -74,6 +75,15 @@ function loadSchedules(): CalendarScheduleEvent[] {
 
 function saveSchedules(list: CalendarScheduleEvent[]) {
   localStorage.setItem(scheduleKey(), JSON.stringify(list));
+}
+
+function loadScheduleHistory(): { id: string }[] {
+  try {
+    const raw = localStorage.getItem(scheduleHistoryKey());
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
 }
 
 function uid() {
@@ -214,9 +224,11 @@ function getChallengeAppearRate() {
 }
 
 export default function HomePage() {
-  const [goals, setGoals] = useState<GoalListItem[]>([]);
   const [schedules, setSchedules] = useState<CalendarScheduleEvent[]>(() =>
     loadSchedules()
+  );
+  const [scheduleHistory, setScheduleHistory] = useState<{ id: string }[]>(() =>
+    loadScheduleHistory()
   );
 
   const [items, setItems] = useState<InboxItem[]>([]);
@@ -267,11 +279,6 @@ export default function HomePage() {
 
   const todayYmd = useMemo(() => toYMD(new Date()), []);
 
-  async function loadGoals() {
-    const g = await listGoals();
-    setGoals(g);
-  }
-
   async function loadInbox() {
     setLoadingInbox(true);
     setError(null);
@@ -288,15 +295,14 @@ export default function HomePage() {
 
   function refreshLocal() {
     setSchedules(loadSchedules());
+    setScheduleHistory(loadScheduleHistory());
   }
 
   useEffect(() => {
-    void loadGoals();
     void loadInbox();
     refreshLocal();
 
     const onFocus = () => {
-      void loadGoals();
       void loadInbox();
       refreshLocal();
     };
@@ -376,18 +382,15 @@ export default function HomePage() {
       ? 0
       : Math.round((todayDone / todaySchedules.length) * 100);
 
-  const totalEarned = goals.reduce((s, g: any) => s + (g.earnedAmount ?? 0), 0);
-  const goalProgressTotal = goals.reduce((s, g: any) => s + (g.taskCount ?? 0), 0);
-  const goalProgressDone = goals.reduce(
-    (s, g: any) => s + (g.completedTaskCount ?? 0),
-    0
-  );
+  const totalEarned = scheduleHistory.length * DAILY_REWARD_YEN;
+  const goalProgressTotal = todaySchedules.length;
+  const goalProgressDone = todayDone;
 
   const message = getTodayMessage({
     todayTotal: todaySchedules.length,
     todayDone,
     inboxCount: items.length,
-    goalsCount: goals.length,
+    goalsCount: 0,
   });
 
   function openQuickMemo() {
