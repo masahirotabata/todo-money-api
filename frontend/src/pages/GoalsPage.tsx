@@ -1,17 +1,17 @@
 // src/pages/GoalsPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { clearToken, deleteAccount } from "../lib/api";
 import {
-  clearToken,
   listGoals,
   createGoal,
+  deleteGoal,
   addTask,
   listTasks,
   completeTask,
-  deleteAccount,
   GoalListItem,
   TaskItem,
-} from "../lib/api";
+} from "../lib/goalStore";
 
 import MoneyRainOverlay from "../components/MoneyRainOverlay";
 
@@ -34,8 +34,16 @@ type LocalSchedule = {
   completedDates?: string[];
   tags?: string[];
   taskRef?: {
-    goalId: number;
-    taskId: number;
+    // Step3-A時点ではSchedulePage/CalendarPage/Calender.tsxが
+    // まだ旧形式 {goalId, taskId} で書き込み続けるため、
+    // 既存ロジック(calcGoalScheduleProgresses等)は旧形式のまま維持する。
+    // 新形式フィールドはStep3-Bで書き込み・参照ロジックをまとめて切り替えるための型定義のみ。
+    goalId?: number;
+    taskId?: number;
+    goalTitle?: string;
+    taskTitle?: string;
+    lifeTag?: LifeTagId;
+    goalKey?: string;
   };
 };
 
@@ -231,13 +239,6 @@ function buildTodayMessage(params: {
 }
 
 
-const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "https://todo-money-api.onrender.com";
-
-function getToken() {
-  return localStorage.getItem("todoMoneyToken") ?? "";
-}
-
 function getCurrentUserKey() {
   const savedUserKey = localStorage.getItem("todoMoneyUserKey");
   if (savedUserKey) return savedUserKey;
@@ -396,38 +397,6 @@ function calcGoalScheduleProgresses(
       };
     })
     .filter((x) => x.total > 0);
-}
-
-async function deleteGoalApi(goalId: number) {
-  const token = getToken();
-
-  try {
-    const res = await fetch(`${API_BASE}/api/goals/${goalId}`, {
-      method: "DELETE",
-      headers: {
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-    });
-
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        clearToken();
-        throw new Error("ログインの有効期限が切れました。再度ログインしてください。");
-      }
-
-      if (res.status >= 500) {
-        throw new Error("通信に失敗しました。時間をおいて再度お試しください。");
-      }
-
-      if (res.status === 404) {
-        throw new Error("削除対象のデータが見つかりませんでした。");
-      }
-
-      throw new Error("削除に失敗しました。");
-    }
-  } catch (e: any) {
-    throw new Error(e?.message ?? "通信に失敗しました。時間をおいて再度お試しください。");
-  }
 }
 
 function customTagKey() {
@@ -712,32 +681,14 @@ export default function GoalsPage() {
   }
 
   async function onDeleteGoal(goalId: number, title: string) {
-    if (
-      !confirm(
-        `「${title}」を削除しますか？\n紐づくカレンダースケジュールも削除されます。`
-      )
-    ) {
+    if (!confirm(`「${title}」を削除しますか？`)) {
       return;
     }
 
     setError(null);
 
     try {
-      await deleteGoalApi(goalId);
-
-      const deletedScheduleIds = schedules
-        .filter((s) => s.taskRef?.goalId === goalId)
-        .map((s) => s.id);
-
-      const nextSchedules = schedules.filter((s) => s.taskRef?.goalId !== goalId);
-      setSchedules(nextSchedules);
-      saveSchedules(nextSchedules);
-
-      const nextHistory = history.filter(
-        (h) => !deletedScheduleIds.includes(h.scheduleId)
-      );
-      setHistory(nextHistory);
-      saveHistory(nextHistory);
+      await deleteGoal(goalId);
 
       setOpenGoals((prev) => {
         const next = { ...prev };
