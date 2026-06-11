@@ -9,9 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@capacitor/cli": "^7.6.4",
     "@capacitor/core": "^8.3.3",
     "@capacitor/ios": "^8.3.3",
+    "@capacitor/local-notifications": "^8.2.0",
     "axios": "^1.16.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

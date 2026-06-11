@@ -8,3 +8,5 @@ frontend/dist/
 frontend/ios/App/App/public/
 frontend/ios/App/Pods/
 frontend/ios/App/DerivedData/
+backend_bk_*/
+frontend_bk_*/

@@ -10,6 +10,96 @@ import {
 
 const DEFAULT_USER_ID = 1;
 
+
+type ReminderType =
+  | "none"
+  | "sameDayMorning"
+  | "previousDay20"
+  | "threeDays20"
+  | "oneWeek20"
+  | "dailyMorningNight";
+
+type CalendarScheduleEvent = {
+  id: string;
+  title: string;
+  memo?: string;
+  startDate: string;
+  endDate: string;
+  startTime?: string;
+  endTime?: string;
+  weekdays?: boolean[];
+  oneShot?: boolean;
+  completedDates?: string[];
+  reminderType?: ReminderType;
+  must?: boolean;
+};
+
+function getCurrentUserKey() {
+  const savedUserKey = localStorage.getItem("todoMoneyUserKey");
+  if (savedUserKey) return savedUserKey;
+
+  const token = localStorage.getItem("todoMoneyToken");
+  if (!token) return "guest";
+
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return String(
+      payload.email ?? payload.sub ?? payload.userId ?? payload.id ?? "user"
+    );
+  } catch {
+    return "user";
+  }
+}
+
+function scheduleKey() {
+  return `todo-money:schedules:v1:${getCurrentUserKey()}`;
+}
+
+function loadSchedules(): CalendarScheduleEvent[] {
+  try {
+    const raw = localStorage.getItem(scheduleKey());
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveSchedules(list: CalendarScheduleEvent[]) {
+  localStorage.setItem(scheduleKey(), JSON.stringify(list));
+}
+
+function uid() {
+  return `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+}
+
+function saveMemoAsSchedule(input: {
+  title: string;
+  memo?: string;
+  targetDate?: string;
+  must?: boolean;
+}) {
+  if (!input.targetDate) return;
+
+  const schedules = loadSchedules();
+  const next: CalendarScheduleEvent[] = [
+    ...schedules,
+    {
+      id: uid(),
+      title: input.title,
+      memo: input.memo || "",
+      startDate: input.targetDate,
+      endDate: input.targetDate,
+      weekdays: [],
+      oneShot: true,
+      completedDates: [],
+      reminderType: input.must ? "previousDay20" : "none",
+      must: !!input.must,
+    },
+  ];
+
+  saveSchedules(next);
+}
+
 type QuickStep = 1 | 2 | 3;
 
 export default function InboxPage() {
@@ -17,14 +107,16 @@ export default function InboxPage() {
   const [title, setTitle] = useState("");
   const [memo, setMemo] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const [must, setMust] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [quickMemoOpen, setQuickMemoOpen] = useState(true);
+  const [quickMemoOpen, setQuickMemoOpen] = useState(false);
   const [quickStep, setQuickStep] = useState<QuickStep>(1);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickTargetDate, setQuickTargetDate] = useState("");
+  const [quickMust, setQuickMust] = useState(true);
   const [quickMemo, setQuickMemo] = useState("");
   const [quickError, setQuickError] = useState<string | null>(null);
 
@@ -59,14 +151,35 @@ export default function InboxPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+  
+    const quickMemoParam =
+      params.get("quickMemo") ||
+      params.get("quick-memo");
+  
     const shouldOpenQuickMemo =
-      params.get("quickMemo") === "1" || params.get("quickMemo") === "true";
-
+      quickMemoParam === "1" ||
+      quickMemoParam === "true";
+  
     if (shouldOpenQuickMemo) {
       openQuickMemo();
       navigate("/inbox", { replace: true });
     }
   }, [location.search, navigate]);
+
+  useEffect(() => {
+    const state = location.state as {
+      quickMemo?: boolean;
+    } | null;
+  
+    if (state?.quickMemo) {
+      openQuickMemo();
+  
+      navigate("/inbox", {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [location.state, navigate]);
 
   useEffect(() => {
     if (!quickMemoOpen) return;
@@ -82,6 +195,25 @@ export default function InboxPage() {
     setQuickError(null);
   }
 
+  useEffect(() => {
+    console.log("Inbox location state", location.state);
+  
+    const state = location.state as {
+      quickMemo?: boolean;
+    } | null;
+  
+    if (state?.quickMemo) {
+      console.log("OPEN QUICK MEMO");
+  
+      openQuickMemo();
+  
+      navigate("/inbox", {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [location.state, navigate]);
+
   function closeQuickMemo() {
     if (saving) return;
 
@@ -89,6 +221,7 @@ export default function InboxPage() {
     setQuickStep(1);
     setQuickTitle("");
     setQuickTargetDate("");
+    setQuickMust(true);
     setQuickMemo("");
     setQuickError(null);
   }
@@ -118,12 +251,22 @@ export default function InboxPage() {
     title: string;
     memo?: string;
     targetDate?: string;
+    must?: boolean;
   }) {
     await createInboxItem({
       userId,
       title: input.title,
       memo: input.memo || undefined,
       targetDate: input.targetDate || undefined,
+    });
+
+    // 日付があるメモは、そのままTaskMoneyの予定データにも流す。
+    // must=true ならカレンダーに常時表示、must=false なら「やりたいタスク」扱いで完了後だけカレンダーに残る。
+    saveMemoAsSchedule({
+      title: input.title,
+      memo: input.memo,
+      targetDate: input.targetDate,
+      must: input.must,
     });
 
     await loadInbox();
@@ -146,11 +289,13 @@ export default function InboxPage() {
         title: trimmedTitle,
         memo: trimmedMemo,
         targetDate: targetDate || undefined,
+        must,
       });
 
       setTitle("");
       setMemo("");
       setTargetDate("");
+      setMust(true);
     } catch (e: any) {
       setError(e?.message || "瞬間メモの保存に失敗しました。");
     } finally {
@@ -176,6 +321,7 @@ export default function InboxPage() {
         title: trimmedTitle,
         memo: trimmedMemo,
         targetDate: quickTargetDate || undefined,
+        must: quickMust,
       });
 
       closeQuickMemo();
@@ -253,6 +399,22 @@ export default function InboxPage() {
           />
         </label>
 
+        <button
+          type="button"
+          style={must ? styles.mustToggleActive : styles.mustToggle}
+          onClick={() => setMust((prev) => !prev)}
+        >
+          <div style={styles.mustTextBlock}>
+            <div style={styles.mustTitle}>カレンダーに常に表示</div>
+            <div style={styles.mustSub}>
+              ON：予定として常時表示。OFF：完了後だけ記録。
+            </div>
+          </div>
+          <div style={must ? styles.mustPillActive : styles.mustPill}>
+            {must ? "Must" : "任意"}
+          </div>
+        </button>
+
         <label style={styles.label}>
           メモ
           <textarea
@@ -273,7 +435,7 @@ export default function InboxPage() {
           onClick={handleCreate}
           disabled={saving}
         >
-          {saving ? "保存中..." : "受信箱に入れる"}
+          {saving ? "保存中..." : targetDate ? (must ? "保存してカレンダーに反映" : "保存してやりたいに追加") : "受信箱に入れる"}
         </button>
       </section>
 
@@ -392,6 +554,22 @@ export default function InboxPage() {
                   value={quickTargetDate}
                   onChange={(e) => setQuickTargetDate(e.target.value)}
                 />
+
+                <button
+                  type="button"
+                  style={quickMust ? styles.mustToggleActive : styles.mustToggle}
+                  onClick={() => setQuickMust((prev) => !prev)}
+                >
+                  <div style={styles.mustTextBlock}>
+                    <div style={styles.mustTitle}>カレンダーに常に表示</div>
+                    <div style={styles.mustSub}>
+                      ON：予定として常時表示。OFF：完了後だけ記録。
+                    </div>
+                  </div>
+                  <div style={quickMust ? styles.mustPillActive : styles.mustPill}>
+                    {quickMust ? "Must" : "任意"}
+                  </div>
+                </button>
               </>
             )}
 
@@ -443,7 +621,7 @@ export default function InboxPage() {
                   onClick={handleQuickCreate}
                   disabled={saving}
                 >
-                  {saving ? "保存中..." : "受信箱に入れる"}
+                  {saving ? "保存中..." : quickTargetDate ? (quickMust ? "保存してカレンダーに反映" : "保存してやりたいに追加") : "受信箱に入れる"}
                 </button>
               )}
             </div>
@@ -557,6 +735,73 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "82px",
     resize: "vertical",
     background: "#fff",
+  },
+
+  mustToggle: {
+    width: "100%",
+    boxSizing: "border-box",
+    margin: "0 0 12px",
+    borderRadius: "16px",
+    border: "1px solid #e5e7eb",
+    background: "#fff",
+    padding: "12px 12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    textAlign: "left",
+  },
+  mustToggleActive: {
+    width: "100%",
+    boxSizing: "border-box",
+    margin: "0 0 12px",
+    borderRadius: "16px",
+    border: "1px solid #86efac",
+    background: "#dcfce7",
+    padding: "12px 12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    textAlign: "left",
+    boxShadow: "0 0 0 1px rgba(34,197,94,0.18) inset",
+  },
+  mustTextBlock: {
+    minWidth: 0,
+    flex: 1,
+  },
+  mustTitle: {
+    color: "#111827",
+    fontSize: "14px",
+    fontWeight: 900,
+    lineHeight: 1.25,
+  },
+  mustSub: {
+    marginTop: "4px",
+    color: "#6b7280",
+    fontSize: "11px",
+    fontWeight: 700,
+    lineHeight: 1.35,
+    whiteSpace: "normal",
+    overflowWrap: "anywhere",
+  },
+  mustPill: {
+    flexShrink: 0,
+    borderRadius: "999px",
+    padding: "7px 9px",
+    background: "#f3f4f6",
+    color: "#4b5563",
+    fontSize: "12px",
+    fontWeight: 900,
+  },
+  mustPillActive: {
+    flexShrink: 0,
+    borderRadius: "999px",
+    padding: "7px 9px",
+    background: "#111827",
+    color: "#fff",
+    fontSize: "12px",
+    fontWeight: 900,
   },
   error: {
     marginBottom: "12px",

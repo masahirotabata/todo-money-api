@@ -135,3 +135,36 @@ export async function markInboxProcessed(id: number): Promise<InboxItem> {
 export async function deleteInboxItem(id: number): Promise<void> {
   await api.delete(`/api/inbox/${id}`);
 }
+
+/* =========================
+ * Future Plan
+ * ========================= */
+
+export type FuturePlanType = "side_business" | "study" | "health" | "output";
+
+export interface FuturePlanRequest {
+  goal: string;
+  deadline?: string;
+  minutes: number;
+  type: FuturePlanType;
+}
+
+export interface FuturePlanItem {
+  title: string;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  memo: string;
+}
+
+export interface FuturePlanResponse {
+  summary: string;
+  items: FuturePlanItem[];
+}
+
+export async function createFuturePlan(
+  request: FuturePlanRequest
+): Promise<FuturePlanResponse> {
+  const res = await api.post("/api/future/plan", request);
+  return res.data;
+}

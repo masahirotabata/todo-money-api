@@ -1,17 +1,17 @@
 {
   "images" : [
     {
-      "filename" : "icon-20.png",
+      "filename" : "StepBook.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "icon-20@2x 1.png",
+      "filename" : "StepBook 1.png",
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "icon-20@3x.png",
+      "filename" : "StepBook 2.png",
       "idiom" : "universal",
       "scale" : "3x"
     }

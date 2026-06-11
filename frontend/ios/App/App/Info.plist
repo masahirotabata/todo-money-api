@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
+	<string>ja</string>
 	<key>CFBundleDisplayName</key>
-        <string>LifeRabbit</string>
+	<string>StepBook</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -45,5 +45,29 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>taskmoney</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>taskmoney</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key>
+			<string>quickMemo</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>瞬間メモ</string>
+			<key>UIApplicationShortcutItemSubtitle</key>
+			<string>思いつきをすぐ保存</string>
+			<key>UIApplicationShortcutItemIconType</key>
+			<string>UIApplicationShortcutIconTypeCompose</string>
+		</dict>
+	</array>
 </dict>
 </plist>

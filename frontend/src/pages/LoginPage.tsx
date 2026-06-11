@@ -201,7 +201,12 @@ function SlideScene({
 export default function LoginPage() {
   const nav = useNavigate();
   const loc = useLocation() as any;
-  const from = loc.state?.from ?? "/goals";
+  const from = loc.state?.from ?? "/";
+
+  useEffect(() => {
+    const token = localStorage.getItem("todoMoneyToken");
+    if (token) nav("/", { replace: true });
+  }, [nav]);
 
   const [phase, setPhase] = useState<"onboarding" | "login">("onboarding");
   const [slideIndex, setSlideIndex] = useState(0);
@@ -220,7 +225,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     const token = localStorage.getItem("todoMoneyToken");
-    if (token) nav("/goals", { replace: true });
+    if (token) nav("/", { replace: true });
   }, [nav]);
 
   useEffect(() => {
@@ -313,7 +318,7 @@ export default function LoginPage() {
 
       setToken(data.token);
       localStorage.setItem("todoMoneyUserKey", `guest:${deviceId}`);
-      nav("/goals", { replace: true });
+      nav("/", { replace: true });
     } catch (e: any) {
       setError(e?.message ?? "ゲスト開始に失敗しました。");
     } finally {

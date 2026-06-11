@@ -1,5 +1,5 @@
 // src/pages/GoalsPage.tsx
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   clearToken,
@@ -488,7 +488,6 @@ export default function GoalsPage() {
   const [rainSeed, setRainSeed] = useState(0);
   const [moneyGain, setMoneyGain] = useState("");
   const [showMoneyGain, setShowMoneyGain] = useState(false);
-  const prevTotalEarnedRef = useRef<number>(0);
   const [showAllGoals, setShowAllGoals] = useState(false);
   const visibleGoals = showAllGoals ? goals : goals.slice(0, 3);
 
@@ -584,15 +583,6 @@ export default function GoalsPage() {
       }
       setTasksByGoal(map);
     })();
-  }, [goals]);
-
-  useEffect(() => {
-    const total = goals.reduce(
-      (sum: number, g: any) => sum + (g.earnedAmount ?? g.earned ?? 0),
-      0
-    );
-    if (total > prevTotalEarnedRef.current) setRainSeed(Date.now());
-    prevTotalEarnedRef.current = total;
   }, [goals]);
 
   useEffect(() => {
